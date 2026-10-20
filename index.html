@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TimeWell - 雲端多時空引擎</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Firebase SDK (雲端同步核心) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .tab-active { background-color: #06b6d4; color: white; border-color: #06b6d4; }
+        .tab-inactive { background-color: #1e293b; color: #94a3b8; border-color: #334155; }
+        .space-grid-cell:hover { border-color: #10b981; background-color: rgba(16, 185, 129, 0.15); cursor: pointer; }
+        .char-bubble { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; font-weight: bold; text-align: center; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 20; cursor: pointer; transition: left 0.5s ease, top 0.5s ease, transform 0.2s; user-select: none; }
+        .char-bubble:hover { transform: translate(-50%, -50%) scale(1.15); z-index: 30; }
+        .role-main { width: 80px; height: 80px; background: linear-gradient(135deg, #f59e0b, #d97706); border: 3px solid #fcd34d; font-size: 1rem; color: white; }
+        .role-sub { width: 60px; height: 60px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: 2px solid #93c5fd; font-size: 0.85rem; color: white; }
+        .role-extra { width: 45px; height: 45px; background: linear-gradient(135deg, #64748b, #475569); border: 1px solid #cbd5e1; font-size: 0.7rem; color: #e2e8f0; }
+        #mindmap-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+        .relation-line { stroke: #64748b; stroke-width: 2; opacity: 0.6; }
+        .relation-text-bg { fill: #0f172a; fill-opacity: 0.9; rx: 4; stroke: #334155; }
+        .relation-text { fill: #38bdf8; font-size: 10px; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 font-sans min-h-screen">
+
+    <!-- 首頁大廳 -->
+    <div id="screen-home" class="max-w-5xl mx-auto p-4 md:p-6 pt-8 md:pt-12 animate-fade-in">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2">TIMEWELL</h1>
+            <p class="text-xs md:text-sm text-emerald-400 font-bold" id="sync-status">🟢 雲端同步中...</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-cyan-400">📖 小說宇宙</h2>
+                    <button onclick="createNewProject('novel')" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-lg">+ 新小說</button>
+                </div>
+                <div id="novel-list" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2"></div>
+            </div>
+            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-emerald-400">📓 個人日記</h2>
+                    <button onclick="createNewProject('diary')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-lg">+ 新日記</button>
+                </div>
+                <div id="diary-list" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 工作區 -->
+    <div id="screen-workspace" class="hidden">
+        <header class="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 p-3 shadow-lg">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div class="flex items-center gap-3">
+                    <button onclick="backToHome()" class="text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-2">◀ 首頁</button>
+                    <div class="truncate">
+                        <h1 class="text-lg font-bold text-white truncate" id="workspace-title">專案名稱</h1>
+                        <p class="text-[10px] text-cyan-400" id="workspace-type">多重時空模式</p>
+                    </div>
+                </div>
+                <div class="flex w-full md:w-auto gap-2 bg-slate-900 p-1 rounded-lg border border-slate-700 overflow-x-auto" id="workspace-tabs">
+                    <button onclick="switchView('setup')" id="btn-setup" class="px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold tab-active">🌍 1. 架構設定</button>
+                    <button onclick="switchView('editor')" id="btn-editor" class="px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold tab-inactive">✍️ 2. 寫作區</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto p-4 pb-24">
+            <!-- 視圖 1：架構設定 -->
+            <div id="view-setup" class="space-y-6 animate-fade-in">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 時間軸管理 -->
+                    <div class="bg-slate-900 rounded-2xl p-5 border border-cyan-900/50 shadow-xl">
+                        <h2 class="text-base font-bold text-cyan-400 mb-3">⏳ 管理時間軸 (可新增多個)</h2>
+                        <div class="flex gap-2 mb-3">
+                            <input type="text" id="newTimelineName" placeholder="例如：地球時間、基地相對時間" class="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs flex-1 text-white">
+                            <select id="newTimelineScope" class="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-white">
+                                <option value="day">尺度：天</option><option value="month">尺度：月</option><option value="year">尺度：年</option><option value="century">尺度：百年</option>
+                            </select>
+                            <button onclick="addTimeline()" class="bg-cyan-600 text-white px-3 py-1.5 rounded text-xs">新增</button>
+                        </div>
+                        <div id="timeline-list" class="space-y-2 max-h-32 overflow-y-auto"></div>
+                    </div>
+
+                    <!-- 地圖管理 -->
+                    <div class="bg-slate-900 rounded-2xl p-5 border border-emerald-900/50 shadow-xl">
+                        <h2 class="text-base font-bold text-emerald-400 mb-3">📍 管理地圖區域 (每區有獨立網格)</h2>
+                        <div class="flex gap-2 mb-3">
+                            <input type="text" id="newMapName" placeholder="例如：奧菲斯基地、地球總部" class="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs flex-1 text-white">
+                            <select id="newMapSize" class="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-white">
+                                <option value="4">4格</option><option value="9" selected>9格</option><option value="16">16格</option>
+                            </select>
+                            <button onclick="addMap()" class="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs">新增</button>
+                        </div>
+                        <div id="map-list" class="space-y-2 max-h-32 overflow-y-auto"></div>
+                    </div>
+                </div>
+
+                <!-- 網格編輯區 -->
+                <div id="grid-editor-section" class="hidden bg-slate-900 rounded-2xl p-5 border border-slate-700 shadow-xl">
+                    <h2 class="text-base font-bold text-emerald-400 mb-3" id="current-map-title">編輯網格</h2>
+                    <div id="spatial-grid-container" class="grid gap-1.5 aspect-square bg-slate-950 p-2 rounded-xl border border-slate-800 mx-auto max-w-sm"></div>
+                </div>
+
+                <!-- 人物心智圖 -->
+                <div class="bg-slate-900 rounded-2xl p-5 border border-amber-900/50 shadow-xl flex flex-col h-[500px]">
+                    <h2 class="text-base font-bold text-amber-400 mb-2">👥 角色與關係網</h2>
+                    <div class="flex flex-wrap gap-2 mb-3 bg-slate-800 p-2 rounded-xl">
+                        <input type="text" id="newCharName" placeholder="名字" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-slate-200 flex-1 min-w-[80px]">
+                        <select id="newCharRole" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-slate-200">
+                            <option value="main">主角</option><option value="sub">配角</option><option value="extra">龍套</option>
+                        </select>
+                        <button onclick="addCharacter()" class="bg-amber-600 px-3 py-1.5 rounded text-xs text-white">新增</button>
+                    </div>
+                    <div class="flex flex-wrap gap-2 mb-3 bg-slate-800 p-2 rounded-xl items-center">
+                        <select id="relCharA" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs flex-1 min-w-[60px]"></select>
+                        <span class="text-slate-500 text-xs">與</span>
+                        <select id="relCharB" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs flex-1 min-w-[60px]"></select>
+                        <input type="text" id="relLabel" placeholder="關係" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs w-16">
+                        <button onclick="addRelationship()" class="bg-cyan-600 px-3 py-1.5 rounded text-xs text-white">連線</button>
+                    </div>
+                    <div class="relative flex-1 min-h-[250px] bg-slate-950 rounded-xl border border-slate-800 overflow-hidden" id="mindmap-container">
+                        <svg id="mindmap-svg"></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 視圖 2：寫作區 -->
+            <div id="view-editor" class="hidden grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
+                <div class="lg:col-span-4 bg-slate-900 rounded-3xl p-5 border border-slate-700 shadow-xl h-fit sticky top-24">
+                    <h2 class="text-lg font-bold text-white mb-4" id="editorTitle">📝 寫作卡片</h2>
+                    <div class="space-y-4">
+                        <div id="novel-selectors" class="space-y-4">
+                            <div class="bg-slate-800 p-2.5 rounded-xl border border-cyan-900/30">
+                                <label class="text-xs font-bold text-cyan-400 mb-1 block">⏳ 選擇發生時間軸</label>
+                                <select id="card-timeline-select" onchange="renderTimeSelectors()" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-white outline-none mb-2"></select>
+                                <div id="dynamic-time-selectors" class="flex flex-wrap gap-1.5"></div>
+                            </div>
+                            <div class="bg-slate-800 p-2.5 rounded-xl border border-emerald-900/30">
+                                <label class="text-xs font-bold text-emerald-400 mb-1 block">📍 選擇發生地圖</label>
+                                <select id="card-map-select" onchange="renderLocationCheckboxes()" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-white outline-none mb-2"></select>
+                                <div id="card-location-checkboxes" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto"></div>
+                            </div>
+                            <div class="bg-slate-800 p-2.5 rounded-xl border border-amber-900/30">
+                                <label class="text-xs font-bold text-amber-400 mb-1 block">👥 登場人物</label>
+                                <div id="card-character-checkboxes" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto"></div>
+                            </div>
+                        </div>
+
+                        <textarea id="storyInput" class="w-full h-32 bg-slate-800 border border-slate-600 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-blue-500 resize-none"></textarea>
+                        <div class="flex gap-2">
+                            <button id="cancelBtn" onclick="cancelEdit()" class="hidden px-3 py-2 rounded-xl bg-slate-800 text-slate-400 text-xs">取消</button>
+                            <button id="submitBtn" onclick="saveStoryCard()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-sm font-bold shadow-lg">📥 儲存卡片</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-8">
+                    <div class="flex justify-between items-end mb-3">
+                        <h2 class="text-lg font-bold text-white">📑 時間線 (<span id="cardCount">0</span>)</h2>
+                        <input type="text" id="searchInput" oninput="renderCards()" placeholder="🔍 搜尋..." class="bg-slate-900 border border-slate-700 rounded-full px-3 py-1.5 text-xs w-32 md:w-48 text-white">
+                    </div>
+                    <div id="cardsContainer" class="flex flex-col gap-3"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ==================== 1. Firebase 雲端設定區 ====================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAwfzJgdmllNgz_jyw_0oZ_as4SoLn1CYs",
+            authDomain: "novel-462e5.firebaseapp.com",
+            databaseURL: "https://novel-462e5-default-rtdb.firebaseio.com",
+            projectId: "novel-462e5",
+            storageBucket: "novel-462e5.firebasestorage.app",
+            messagingSenderId: "730038256784",
+            appId: "1:730038256784:web:976415daf4c99e1a3b0415"
+        };
+        
+        let useCloud = false;
+        let dbRef = null;
+        if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            firebase.initializeApp(firebaseConfig);
+            dbRef = firebase.database().ref('timewell_data');
+            useCloud = true;
+        }
+
+        let appData = { projects: [] };
+        let activeProject = null;
+        let editingCardId = null;
+        let editingMapId = null;
+
+        // ==================== 2. 資料同步核心 ====================
+        function initApp() {
+            if (useCloud) {
+                dbRef.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) appData = data;
+                    if (!appData.projects) appData.projects = [];
+                    
+                    if (!activeProject) renderHome();
+                    else {
+                        activeProject = appData.projects.find(p => p.id === activeProject.id);
+                        if(activeProject) {
+                            if (document.getElementById('view-setup').style.display !== 'none') renderSetupView();
+                            else { renderEditorView(); renderCards(); }
+                        } else {
+                            backToHome();
+                        }
+                    }
+                    document.getElementById('sync-status').innerText = "🟢 雲端同步中";
+                });
+            } else {
+                document.getElementById('sync-status').innerText = "🟡 離線本地模式 (請至原始碼填入 Firebase 金鑰啟用雲端)";
+                try {
+                    const saved = localStorage.getItem('timewell_local_v3');
+                    if (saved) appData = JSON.parse(saved);
+                } catch (e) {}
+                renderHome();
+            }
+        }
+
+        function saveGlobalData() {
+            if (useCloud) dbRef.set(appData);
+            else localStorage.setItem('timewell_local_v3', JSON.stringify(appData));
+        }
+
+        // ==================== 3. 首頁與專案建立 ====================
+        function renderHome() {
+            const novelList = document.getElementById('novel-list');
+            const diaryList = document.getElementById('diary-list');
+            novelList.innerHTML = ''; diaryList.innerHTML = '';
+
+            const novels = (appData.projects || []).filter(p => p.type === 'novel');
+            const diaries = (appData.projects || []).filter(p => p.type === 'diary');
+
+            if (novels.length === 0) novelList.innerHTML = '<div class="text-slate-500 text-xs text-center py-4">無資料</div>';
+            if (diaries.length === 0) diaryList.innerHTML = '<div class="text-slate-500 text-xs text-center py-4">無資料</div>';
+
+            const createCardHTML = (proj, icon) => `
+                <div class="project-card flex justify-between items-center bg-slate-800/80 p-3 rounded-xl border border-slate-700 cursor-pointer hover:border-cyan-500 transition-colors" onclick="openProject('${proj.id}')">
+                    <div class="overflow-hidden">
+                        <h3 class="text-white text-sm font-bold flex items-center gap-2 truncate">${icon} ${proj.title}</h3>
+                        <p class="text-[10px] text-slate-400 mt-1 truncate">${proj.updatedAt} | 紀錄數: ${(proj.storyCards||[]).length}</p>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteProject('${proj.id}')" class="text-slate-500 hover:text-red-400 px-2 py-1 text-xs shrink-0">刪除</button>
+                </div>
+            `;
+
+            novels.sort((a,b)=>b.lastTimestamp - a.lastTimestamp).forEach(p => novelList.innerHTML += createCardHTML(p, '📘'));
+            diaries.sort((a,b)=>b.lastTimestamp - a.lastTimestamp).forEach(p => diaryList.innerHTML += createCardHTML(p, '📝'));
+        }
+
+        function createNewProject(type) {
+            const title = prompt(`新${type === 'novel' ? '小說' : '日記'}命名：`, `未命名`);
+            if (!title) return;
+            const newProj = {
+                id: 'proj_' + Date.now(), type: type, title: title.trim(), updatedAt: new Date().toLocaleString(), lastTimestamp: Date.now(),
+                worldConfig: { 
+                    timelines: [{ id: 'tl_main', name: '預設時間軸', scope: type === 'diary' ? 'day' : 'year' }],
+                    maps: [{ id: 'map_main', name: '預設地點', size: 9, locations: Array(9).fill('') }], 
+                    characters: [], relationships: [] 
+                },
+                storyCards: []
+            };
+            appData.projects.push(newProj);
+            saveGlobalData(); openProject(newProj.id);
+        }
+
+        function deleteProject(id) {
+            if (confirm("永久刪除這個專案？")) { appData.projects = appData.projects.filter(p => p.id !== id); saveGlobalData(); renderHome(); }
+        }
+
+        function openProject(id) {
+            activeProject = appData.projects.find(p => p.id === id);
+            if (!activeProject) return;
+            document.getElementById('screen-home').style.display = 'none';
+            document.getElementById('screen-workspace').style.display = 'block';
+            document.getElementById('workspace-title').innerText = activeProject.title;
+            
+            if (!activeProject.worldConfig.timelines) activeProject.worldConfig.timelines = [{ id: 'tl_main', name: '預設時間軸', scope: activeProject.worldConfig.timeScope || 'year' }];
+            if (!activeProject.worldConfig.maps) activeProject.worldConfig.maps = [{ id: 'map_main', name: '預設地圖', size: activeProject.worldConfig.gridSize || 9, locations: activeProject.worldConfig.locations || Array(9).fill('') }];
+            if (!activeProject.storyCards) activeProject.storyCards = [];
+
+            if (activeProject.type === 'diary') {
+                document.getElementById('workspace-type').innerText = '📓 日記模式';
+                document.getElementById('workspace-tabs').style.display = 'none';
+                document.getElementById('novel-selectors').style.display = 'none';
+                switchView('editor'); 
+            } else {
+                document.getElementById('workspace-type').innerText = '🌌 多重時空模式';
+                document.getElementById('workspace-tabs').style.display = 'flex';
+                document.getElementById('novel-selectors').style.display = 'block';
+                switchView('setup');
+            }
+        }
+
+        function backToHome() { 
+            document.getElementById('screen-home').style.display = 'block';
+            document.getElementById('screen-workspace').style.display = 'none';
+            activeProject = null; cancelEdit(); renderHome(); 
+        }
+
+        function saveProject() {
+            if (!activeProject) return;
+            activeProject.updatedAt = new Date().toLocaleString();
+            activeProject.lastTimestamp = Date.now();
+            saveGlobalData(); 
+        }
+
+        function switchView(view) {
+            if (!activeProject) return;
+            const isSetup = view === 'setup';
+            document.getElementById('btn-setup').className = `tab-btn flex-1 md:flex-none px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold ${isSetup?'tab-active':'tab-inactive'}`;
+            document.getElementById('btn-editor').className = `tab-btn flex-1 md:flex-none px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold ${!isSetup?'tab-active':'tab-inactive'}`;
+            document.getElementById('view-setup').style.display = isSetup ? 'block' : 'none';
+            document.getElementById('view-editor').style.display = !isSetup ? 'grid' : 'none';
+            
+            if (isSetup) { renderSetupView(); } 
+            else { renderEditorView(); renderCards(); }
+        }
+
+        // ==================== 4. 架構設定：多時空管理 ====================
+        function renderSetupView() {
+            const tlContainer = document.getElementById('timeline-list');
+            tlContainer.innerHTML = activeProject.worldConfig.timelines.map(t => `
+                <div class="flex justify-between items-center bg-slate-800 p-2 rounded border border-slate-700">
+                    <span class="text-xs text-white">${t.name} <span class="text-cyan-500">(${t.scope})</span></span>
+                    <button onclick="deleteTimeline('${t.id}')" class="text-slate-500 hover:text-red-400 text-xs">刪除</button>
+                </div>
+            `).join('');
+
+            const mapContainer = document.getElementById('map-list');
+            mapContainer.innerHTML = activeProject.worldConfig.maps.map(m => `
+                <div class="flex justify-between items-center bg-slate-800 p-2 rounded border border-slate-700 cursor-pointer hover:border-emerald-500" onclick="openGridEditor('${m.id}')">
+                    <span class="text-xs text-white">${m.name} <span class="text-emerald-500">(${m.size}格)</span></span>
+                    <button onclick="event.stopPropagation(); deleteMap('${m.id}')" class="text-slate-500 hover:text-red-400 text-xs">刪除</button>
+                </div>
+            `).join('');
+
+            if (editingMapId && activeProject.worldConfig.maps.find(m=>m.id === editingMapId)) {
+                document.getElementById('grid-editor-section').style.display = 'block';
+                renderSpatialGrid();
+            } else {
+                document.getElementById('grid-editor-section').style.display = 'none';
+            }
+
+            renderMindMap();
+        }
+
+        function addTimeline() {
+            const name = document.getElementById('newTimelineName').value.trim();
+            const scope = document.getElementById('newTimelineScope').value;
+            if(!name) return;
+            activeProject.worldConfig.timelines.push({ id: 'tl_' + Date.now(), name, scope });
+            document.getElementById('newTimelineName').value = '';
+            saveProject(); renderSetupView();
+        }
+        function deleteTimeline(id) {
+            if(activeProject.worldConfig.timelines.length <= 1) return alert("至少要保留一條時間軸！");
+            activeProject.worldConfig.timelines = activeProject.worldConfig.timelines.filter(t => t.id !== id);
+            saveProject(); renderSetupView();
+        }
+
+        function addMap() {
+            const name = document.getElementById('newMapName').value.trim();
+            const size = parseInt(document.getElementById('newMapSize').value);
+            if(!name) return;
+            activeProject.worldConfig.maps.push({ id: 'map_' + Date.now(), name, size, locations: Array(size).fill('') });
+            document.getElementById('newMapName').value = '';
+            saveProject(); renderSetupView();
+        }
+        function deleteMap(id) {
+            if(activeProject.worldConfig.maps.length <= 1) return alert("至少要保留一個地圖！");
+            activeProject.worldConfig.maps = activeProject.worldConfig.maps.filter(m => m.id !== id);
+            if(editingMapId === id) editingMapId = null;
+            saveProject(); renderSetupView();
+        }
+
+        function openGridEditor(id) {
+            editingMapId = id;
+            const map = activeProject.worldConfig.maps.find(m => m.id === id);
+            document.getElementById('current-map-title').innerText = `編輯地圖網格：${map.name}`;
+            document.getElementById('grid-editor-section').style.display = 'block';
+            renderSpatialGrid();
+            document.getElementById('grid-editor-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function renderSpatialGrid() {
+            if (!editingMapId) return;
+            const map = activeProject.worldConfig.maps.find(m => m.id === editingMapId);
+            const container = document.getElementById('spatial-grid-container');
+            const cols = Math.sqrt(map.size);
+            container.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+            container.innerHTML = map.locations.map((loc, idx) => `
+                <div onclick="editLocation(${idx})" class="space-grid-cell border border-slate-700 rounded flex items-center justify-center p-1 text-center break-all min-h-[40px] md:min-h-[50px]">
+                    ${loc ? `<span class="text-emerald-400 font-bold text-[10px] md:text-xs">${loc}</span>` : `<span class="text-slate-700">+</span>`}
+                </div>`).join('');
+        }
+        function editLocation(index) {
+            const map = activeProject.worldConfig.maps.find(m => m.id === editingMapId);
+            const newName = prompt("請輸入該格地點名稱：", map.locations[index] || '');
+            if (newName !== null) { map.locations[index] = newName.trim(); saveProject(); renderSpatialGrid(); }
+        }
+
+        // --- 人物心智圖 ---
+        function addCharacter() {
+            const name = document.getElementById('newCharName').value.trim();
+            const role = document.getElementById('newCharRole').value;
+            if (!name) return;
+            if(!activeProject.worldConfig.characters) activeProject.worldConfig.characters = [];
+            if (activeProject.worldConfig.characters.some(c => c.name === name)) return alert("角色已存在！");
+            activeProject.worldConfig.characters.push({ id: 'char_' + Date.now(), name, role });
+            document.getElementById('newCharName').value = ''; saveProject(); renderMindMap(); 
+        }
+        function deleteCharacter(id) {
+            if (confirm(`確定刪除？`)) {
+                activeProject.worldConfig.characters = activeProject.worldConfig.characters.filter(c => c.id !== id);
+                if(activeProject.worldConfig.relationships) activeProject.worldConfig.relationships = activeProject.worldConfig.relationships.filter(r => r.charAId !== id && r.charBId !== id);
+                saveProject(); renderMindMap(); 
+            }
+        }
+        function addRelationship() {
+            const charAId = document.getElementById('relCharA').value;
+            const charBId = document.getElementById('relCharB').value;
+            const label = document.getElementById('relLabel').value.trim() || '-';
+            if (!charAId || !charBId || charAId === charBId) return;
+            if(!activeProject.worldConfig.relationships) activeProject.worldConfig.relationships = [];
+            activeProject.worldConfig.relationships = activeProject.worldConfig.relationships.filter(r => !(r.charAId === charAId && r.charBId === charBId) && !(r.charAId === charBId && r.charBId === charAId));
+            activeProject.worldConfig.relationships.push({ charAId, charBId, label });
+            document.getElementById('relLabel').value = ''; saveProject(); drawMindMapLines(); 
+        }
+        function renderMindMap() {
+            const container = document.getElementById('mindmap-container');
+            const cx = container.clientWidth / 2, cy = container.clientHeight / 2;
+            const radius = Math.max(40, Math.min(cx, cy) - 40);
+            Array.from(container.children).forEach(child => { if (child.tagName !== 'svg') child.remove(); });
+            const chars = activeProject.worldConfig.characters || [];
+            const total = chars.length;
+            if (total === 0) { document.getElementById('mindmap-svg').innerHTML = ''; document.getElementById('relCharA').innerHTML = ''; document.getElementById('relCharB').innerHTML = ''; return; }
+
+            chars.forEach((char, i) => {
+                const bubble = document.createElement('div');
+                bubble.id = `node-${char.id}`; bubble.className = `char-bubble role-${char.role}`;
+                bubble.innerText = char.name; bubble.onclick = () => deleteCharacter(char.id);
+                let x = cx, y = cy;
+                if (total > 1) { const angle = -Math.PI / 2 + (i / total) * 2 * Math.PI; x = cx + radius * Math.cos(angle); y = cy + radius * Math.sin(angle); }
+                bubble.style.left = `${x}px`; bubble.style.top = `${y}px`;
+                container.appendChild(bubble);
+            });
+            const opts = chars.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            document.getElementById('relCharA').innerHTML = opts; document.getElementById('relCharB').innerHTML = opts;
+            if(total > 1) document.getElementById('relCharB').selectedIndex = 1;
+            setTimeout(drawMindMapLines, 50);
+        }
+        function drawMindMapLines() {
+            const svg = document.getElementById('mindmap-svg'); svg.innerHTML = ''; 
+            const rels = activeProject.worldConfig.relationships || [];
+            rels.forEach(rel => {
+                const nA = document.getElementById(`node-${rel.charAId}`), nB = document.getElementById(`node-${rel.charBId}`);
+                if (!nA || !nB) return;
+                const x1 = parseFloat(nA.style.left), y1 = parseFloat(nA.style.top), x2 = parseFloat(nB.style.left), y2 = parseFloat(nB.style.top);
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+                line.setAttribute('class', 'relation-line'); svg.appendChild(line);
+                const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, textLen = rel.label.length * 10 + 10; 
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', mx - textLen / 2); rect.setAttribute('y', my - 9); rect.setAttribute('width', textLen); rect.setAttribute('height', 18);
+                rect.setAttribute('class', 'relation-text-bg'); svg.appendChild(rect);
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', mx); text.setAttribute('y', my); text.setAttribute('class', 'relation-text'); text.textContent = rel.label; svg.appendChild(text);
+            });
+        }
+
+        // ==================== 5. 寫作區：動態時空下拉選單 ====================
+        function renderEditorView() {
+            if (activeProject.type === 'novel') {
+                const tlSelect = document.getElementById('card-timeline-select');
+                tlSelect.innerHTML = activeProject.worldConfig.timelines.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                const mapSelect = document.getElementById('card-map-select');
+                mapSelect.innerHTML = activeProject.worldConfig.maps.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+                const cCont = document.getElementById('card-character-checkboxes');
+                const chars = activeProject.worldConfig.characters || [];
+                if (chars.length===0) cCont.innerHTML = '<span class="text-[10px] text-slate-500">尚無角色</span>';
+                else cCont.innerHTML = chars.map(c => {
+                    let col = c.role === 'main' ? 'amber' : c.role === 'sub' ? 'blue' : 'slate';
+                    return `<label class="flex items-center gap-1 bg-slate-900 border border-${col}-900/50 px-2 py-0.5 rounded"><input type="checkbox" value="${c.name}" class="chk-character accent-${col}-500"><span class="text-[10px] text-${col}-100">${c.name}</span></label>`;
+                }).join('');
+
+                renderTimeSelectors();
+                renderLocationCheckboxes();
+            } else {
+                // 日記模式簡單化
+                const timeContainer = document.getElementById('dynamic-time-selectors');
+                timeContainer.innerHTML = `<input type="date" id="time-date" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-cyan-100 outline-none"><div class="flex items-center gap-1"><select id="time-hour" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-cyan-100 outline-none"><option value="">未選</option>${Array.from({length:24}, (_,i) => `<option value="${i.toString().padStart(2,'0')}:00">${i.toString().padStart(2,'0')}:00</option>`).join('')}</select></div>`;
+            }
+        }
+
+        function renderTimeSelectors() {
+            if(activeProject.type === 'diary') return;
+            const timeContainer = document.getElementById('dynamic-time-selectors');
+            timeContainer.innerHTML = '';
+            let scope = 'year';
+            const selectedTlId = document.getElementById('card-timeline-select').value;
+            const tlConfig = activeProject.worldConfig.timelines.find(t => t.id === selectedTlId);
+            if (tlConfig) scope = tlConfig.scope;
+
+            const selectCls = "bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-cyan-100 outline-none";
+            const createSel = (id, label, arr) => {
+                let h = `<div class="flex items-center gap-1"><select id="${id}" class="${selectCls}"><option value="">未選</option>`;
+                arr.forEach(o => h += `<option value="${o}">${o}</option>`);
+                return h + `</select></div>`;
+            };
+
+            const hours = Array.from({length:24}, (_,i) => `${i.toString().padStart(2,'0')}:00`);
+            const dMonth = Array.from({length:30}, (_,i) => `第${i+1}天`);
+            const dWeek = ['週一','週二','週三','週四','週五','週六','週日'];
+            const months = Array.from({length:12}, (_,i) => `${i+1}月`);
+            const years = Array.from({length:10}, (_,i) => `第${i+1}年`);
+            const decades = Array.from({length:10}, (_,i) => `第${(i+1)*10}年代`);
+
+            if (scope === 'day') timeContainer.innerHTML += createSel('time-hour', '', hours);
+            if (scope === 'week') timeContainer.innerHTML += createSel('time-day', '', dWeek) + createSel('time-hour', '', hours);
+            if (scope === 'month') timeContainer.innerHTML += createSel('time-day', '', dMonth) + createSel('time-hour', '', hours);
+            if (scope === 'year') timeContainer.innerHTML += createSel('time-month', '', months) + createSel('time-day', '', dMonth);
+            if (scope === 'decade') timeContainer.innerHTML += createSel('time-year', '', years) + createSel('time-month', '', months);
+            if (scope === 'century') timeContainer.innerHTML += createSel('time-decade', '', decades) + createSel('time-year', '', years);
+        }
+
+        function renderLocationCheckboxes() {
+            if(activeProject.type === 'diary') return;
+            const lCont = document.getElementById('card-location-checkboxes');
+            const selectedMapId = document.getElementById('card-map-select').value;
+            const mapConfig = activeProject.worldConfig.maps.find(m => m.id === selectedMapId);
+            
+            if (!mapConfig) return;
+            const validLocs = mapConfig.locations.filter(l => l && l.trim() !== '');
+            if (validLocs.length===0) lCont.innerHTML = '<span class="text-[10px] text-slate-500">該區域尚無命名網格</span>';
+            else lCont.innerHTML = validLocs.map(l => `<label class="flex items-center gap-1 bg-slate-900 border border-emerald-900/50 px-2 py-0.5 rounded"><input type="checkbox" value="${l}" class="chk-location accent-emerald-500"><span class="text-[10px] text-emerald-100">${l}</span></label>`).join('');
+        }
+
+        function saveStoryCard() {
+            const content = document.getElementById('storyInput').value.trim();
+            if (!content) return alert('內文不能為空！');
+            
+            let timeParts = [];
+            if (activeProject.type === 'diary') {
+                if(document.getElementById('time-date') && document.getElementById('time-date').value) timeParts.push(document.getElementById('time-date').value);
+                if(document.getElementById('time-hour') && document.getElementById('time-hour').value) timeParts.push(document.getElementById('time-hour').value);
+            } else {
+                const tlSelect = document.getElementById('card-timeline-select');
+                const tlName = tlSelect.options[tlSelect.selectedIndex].text;
+                timeParts.push(`[${tlName}]`);
+                ['time-decade','time-year','time-month','time-day','time-hour'].forEach(id => {
+                    const el = document.getElementById(id); if (el && el.value) timeParts.push(el.value);
+                });
+            }
+            const timeStr = timeParts.length > 0 && timeParts[0] !== '[]' ? timeParts.join(' ') : `未定時間`;
+
+            let locs = [], chars = [];
+            if (activeProject.type === 'novel') {
+                locs = Array.from(document.querySelectorAll('.chk-location:checked')).map(e => e.value);
+                chars = Array.from(document.querySelectorAll('.chk-character:checked')).map(e => e.value);
+            }
+
+            if(!activeProject.storyCards) activeProject.storyCards = [];
+            if (editingCardId) {
+                const idx = activeProject.storyCards.findIndex(c => c.id === editingCardId);
+                if (idx > -1) activeProject.storyCards[idx] = { ...activeProject.storyCards[idx], time: timeStr, locations: locs, characters: chars, content };
+            } else {
+                activeProject.storyCards.unshift({ id: 'card_' + Date.now(), time: timeStr, locations: locs, characters: chars, content });
+            }
+            saveProject(); cancelEdit(); renderCards();
+        }
+
+        function editCard(id) {
+            const card = activeProject.storyCards.find(c => c.id === id);
+            if (!card) return;
+            cancelEdit(); editingCardId = id;
+            document.getElementById('editorTitle').innerText = "✏️ 編輯";
+            document.getElementById('submitBtn').innerText = "💾 儲存修改";
+            document.getElementById('cancelBtn').classList.remove('hidden');
+            document.getElementById('storyInput').value = card.content;
+            if(activeProject.type === 'novel') {
+                alert("多時空模式下編輯卡片，請手動重新點選左方的時間與地點！");
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            editingCardId = null; document.getElementById('storyInput').value = '';
+            document.querySelectorAll('select').forEach(e => { if(e.id.startsWith('time-')) e.selectedIndex = 0; });
+            document.querySelectorAll('input[type="checkbox"]').forEach(e => e.checked = false);
+            if(document.getElementById('time-date')) document.getElementById('time-date').value = '';
+            document.getElementById('editorTitle').innerText = "📝 寫作卡片";
+            document.getElementById('submitBtn').innerText = "📥 儲存卡片";
+            document.getElementById('cancelBtn').classList.add('hidden');
+        }
+
+        function deleteCard(id) {
+            if(confirm('刪除？')) { activeProject.storyCards = activeProject.storyCards.filter(c => c.id !== id); saveProject(); if (editingCardId === id) cancelEdit(); renderCards(); }
+        }
+
+        function renderCards() {
+            const kw = document.getElementById('searchInput').value.toLowerCase();
+            document.getElementById('cardCount').innerText = (activeProject.storyCards || []).length;
+            const container = document.getElementById('cardsContainer');
+            container.innerHTML = '';
+            if (!activeProject.storyCards || activeProject.storyCards.length === 0) return container.innerHTML = '<div class="text-center text-slate-500 py-6 border-2 border-dashed border-slate-800 rounded-xl">尚無內容</div>';
+
+            activeProject.storyCards.forEach(card => {
+                if (kw && !`${card.content} ${card.time} ${(card.locations||[]).join(' ')} ${(card.characters||[]).join(' ')}`.toLowerCase().includes(kw)) return;
+                
+                let tags = '';
+                if(activeProject.type === 'novel') {
+                    const lTags = (card.locations||[]).map(l => `<span class="px-1.5 py-0.5 rounded bg-emerald-900/40 border border-emerald-700 text-emerald-300 text-[10px]">${l}</span>`).join('');
+                    const cTags = (card.characters||[]).map(c => {
+                        const rCfg = (activeProject.worldConfig.characters||[]).find(wc => wc.name === c);
+                        let col = rCfg && rCfg.role === 'main' ? 'amber' : (rCfg && rCfg.role === 'sub' ? 'blue' : 'slate');
+                        return `<span class="px-1.5 py-0.5 rounded bg-${col}-900/40 border border-${col}-700 text-${col}-300 text-[10px]">${c}</span>`;
+                    }).join('');
+                    if (lTags || cTags) tags = `<div class="flex flex-wrap gap-1.5 mb-2">${lTags} ${cTags}</div>`;
+                }
+
+                container.innerHTML += `
+                <div class="bg-slate-900 rounded-xl p-4 border border-slate-700 relative">
+                    <div class="absolute top-3 right-3 flex gap-2">
+                        <button onclick="editCard('${card.id}')" class="text-slate-400 hover:text-amber-400 text-[10px] px-1.5 py-0.5 bg-slate-800 rounded">修改</button>
+                        <button onclick="deleteCard('${card.id}')" class="text-slate-400 hover:text-red-400 text-[10px] px-1.5 py-0.5 bg-slate-800 rounded">刪除</button>
+                    </div>
+                    <div class="mb-2"><span class="text-cyan-400 font-bold text-xs bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">⏳ ${card.time}</span></div>
+                    ${tags}
+                    <div class="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap">${card.content}</div>
+                </div>`;
+            });
+        }
+
+        window.addEventListener('resize', () => { if (activeProject && document.getElementById('view-setup').style.display !== 'none') renderMindMap(); });
+        initApp();
+    </script>
+</body>
+</html>
