@@ -3,294 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>solos. - 視覺化敘事引擎</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#0f172a">
+    <title>Quadrama - 四軌視覺敘事引擎</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        .tab-active { background-color: #06b6d4; color: white; border-color: #06b6d4; }
-        .tab-inactive { background-color: #1e293b; color: #94a3b8; border-color: #334155; }
         
-        /* 空間網格 */
-        .space-grid-cell { transition: all 0.2s ease; user-select: none; position: relative; overflow: hidden; }
-        .space-grid-cell:hover { filter: brightness(1.2); cursor: pointer; transform: scale(0.98); }
-        
-        /* 2x2 影像上傳框 */
-        .img-upload-box { border: 1px dashed #475569; transition: all 0.2s; background: rgba(15, 23, 42, 0.5); }
-        .img-upload-box:hover { border-color: #0ea5e9; background-color: rgba(14, 165, 233, 0.1); cursor: pointer; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* 心智圖泡泡 */
-        .char-bubble { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; font-weight: bold; text-align: center; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 20; cursor: pointer; transition: left 0.5s ease, top 0.5s ease, transform 0.2s; user-select: none; }
-        .char-bubble:hover { transform: translate(-50%, -50%) scale(1.15); z-index: 30; }
-        .role-main { width: 80px; height: 80px; background: linear-gradient(135deg, #f59e0b, #d97706); border: 3px solid #fcd34d; font-size: 1rem; color: white; }
-        .role-sub { width: 60px; height: 60px; background: linear-gradient(135deg, #3b82f6, #2563eb); border: 2px solid #93c5fd; font-size: 0.85rem; color: white; }
-        .role-extra { width: 45px; height: 45px; background: linear-gradient(135deg, #64748b, #475569); border: 1px solid #cbd5e1; font-size: 0.7rem; color: #e2e8f0; }
+        /* 人物幾何形狀 */
+        .shape-char { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; font-weight: bold; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; transition: all 0.3s ease; user-select: none; }
+        .shape-char:hover { transform: translate(-50%, -50%) scale(1.15); z-index: 30 !important; filter: brightness(1.2); }
+        .align-good { border-radius: 8px; background: linear-gradient(135deg, #0ea5e9, #0284c7); border: 2px solid #7dd3fc; color: white; }
+        .align-evil { clip-path: polygon(50% 0%, 0% 100%, 100% 100%); background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; align-items: flex-end; padding-bottom: 15%; }
+        .align-neutral { border-radius: 50%; background: linear-gradient(135deg, #64748b, #475569); border: 2px solid #cbd5e1; color: white; }
+        .size-main { width: 70px; height: 70px; font-size: 14px; z-index: 20; }
+        .size-sub { width: 50px; height: 50px; font-size: 11px; z-index: 15; }
+        .size-extra { width: 35px; height: 35px; font-size: 9px; z-index: 10; }
+
+        /* 心智圖連線 */
         #mindmap-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
-        .relation-line { stroke: #64748b; stroke-width: 2; opacity: 0.6; }
-        .relation-text-bg { fill: #0f172a; fill-opacity: 0.9; rx: 4; stroke: #334155; }
-        .relation-text { fill: #38bdf8; font-size: 10px; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+        .relation-line { stroke: #64748b; stroke-width: 2; opacity: 0.5; }
+        .relation-text-bg { fill: #0f172a; fill-opacity: 0.9; rx: 4; }
+        .relation-text { fill: #38bdf8; font-size: 10px; text-anchor: middle; dominant-baseline: central; }
 
-        /* 時間軌道隱藏卷軸 */
-        .timeline-track-container::-webkit-scrollbar { display: none; }
-        .timeline-track-container { -ms-overflow-style: none; scrollbar-width: none; }
+        /* 地點彈性方塊 */
+        .loc-box { flex: 1 1 auto; max-width: 120px; min-width: 60px; aspect-ratio: 1/1; transition: all 0.2s; border-radius: 12px; }
+        .loc-box:hover { filter: brightness(1.2); transform: translateY(-2px); cursor: pointer; }
+        .loc-box.selected-for-group { border: 3px dashed #fcd34d !important; transform: scale(0.95); opacity: 0.8; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 font-sans min-h-screen">
+<body class="bg-slate-950 text-slate-200 font-sans h-screen overflow-hidden flex flex-col">
 
-    <!-- 首頁大廳 -->
-    <div id="screen-home" class="max-w-5xl mx-auto p-4 md:p-6 pt-8 md:pt-12 animate-fade-in">
-        <div class="text-center mb-8">
-            <h1 class="text-4xl md:text-6xl font-bold tracking-widest text-white mb-2">solos<span class="text-cyan-500">.</span></h1>
-            <p class="text-xs md:text-sm text-slate-400 font-bold" id="sync-status">🟢 雲端同步中...</p>
+    <!-- ==================== 首頁大廳 ==================== -->
+    <div id="screen-home" class="h-full flex flex-col items-center justify-center p-6 animate-fade-in z-50 absolute inset-0 bg-slate-950">
+        <div class="text-center mb-12">
+            <h1 class="text-6xl font-bold tracking-widest text-white mb-3">Quad<span class="text-cyan-500">rama.</span></h1>
+            <p class="text-slate-500 text-sm">四軌視覺敘事引擎</p>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-xl font-bold text-cyan-400">📖 小說宇宙</h2>
-                    <button onclick="createNewProject('novel')" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-lg">+ 新小說</button>
-                </div>
-                <div id="novel-list" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2"></div>
+        <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+            <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                <h2 class="text-xl font-bold text-white">故事 Story</h2>
+                <button onclick="createNewProject()" class="w-10 h-10 rounded-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xl flex items-center justify-center transition-transform hover:scale-110 shadow-[0_0_15px_rgba(8,145,178,0.5)]">+</button>
             </div>
-            <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-xl font-bold text-emerald-400">📓 個人日記</h2>
-                    <button onclick="createNewProject('diary')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-lg">+ 新日記</button>
-                </div>
-                <div id="diary-list" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2"></div>
-            </div>
+            <div id="story-list" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2 hide-scroll"></div>
         </div>
     </div>
 
-    <!-- 工作區 -->
-    <div id="screen-workspace" class="hidden">
-        <header class="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 p-3 shadow-lg">
-            <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                <div class="flex items-center gap-3">
-                    <button onclick="backToHome()" class="text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-2">◀ 大廳</button>
-                    <div class="truncate">
-                        <h1 class="text-lg font-bold text-white truncate" id="workspace-title">專案名稱</h1>
-                        <p class="text-[10px] text-cyan-400" id="workspace-type">多重時空模式</p>
-                    </div>
-                </div>
-                <div class="flex w-full md:w-auto gap-2 bg-slate-900 p-1 rounded-lg border border-slate-700 overflow-x-auto" id="workspace-tabs">
-                    <button onclick="switchView('setup')" id="btn-setup" class="px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold tab-active">🌍 1. 架構與設定</button>
-                    <button onclick="switchView('editor')" id="btn-editor" class="px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold tab-inactive">✍️ 2. 寫作與時間軸</button>
-                </div>
+    <!-- ==================== 四軌工作站 ==================== -->
+    <div id="screen-workspace" class="hidden h-full flex-col bg-slate-950">
+        
+        <header class="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 shrink-0">
+            <div class="flex items-center gap-4">
+                <button onclick="backToHome()" class="text-slate-400 hover:text-white text-xs bg-slate-800 px-3 py-1.5 rounded transition-colors">◀ 返回</button>
+                <h1 class="text-sm font-bold text-white" id="workspace-title">故事名稱</h1>
             </div>
+            <div id="breadcrumb-container" class="flex text-xs items-center gap-2 overflow-x-auto hide-scroll"></div>
         </header>
 
-        <main class="max-w-7xl mx-auto p-4 pb-24">
+        <div class="flex-1 flex flex-col overflow-hidden">
             
-            <!-- 視圖 1：架構設定 -->
-            <div id="view-setup" class="space-y-6 animate-fade-in">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- 地圖管理 -->
-                    <div class="bg-slate-900 rounded-2xl p-5 border border-emerald-900/50 shadow-xl flex flex-col">
-                        <div class="flex justify-between items-center mb-3">
-                            <h2 class="text-base font-bold text-emerald-400">📍 地圖與空間定義</h2>
-                            <select id="map-selector" onchange="renderSpatialGrid()" class="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white outline-none"></select>
-                        </div>
-                        <div class="flex gap-2 mb-4">
-                            <input type="text" id="newMapName" placeholder="新增地圖名稱..." class="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs flex-1 text-white">
-                            <select id="newMapSize" class="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white">
-                                <option value="9">9格</option><option value="16">16格</option><option value="25">25格</option>
-                            </select>
-                            <button onclick="addMap()" class="bg-emerald-600 text-white px-3 py-1 rounded text-xs">新增</button>
-                            <button onclick="deleteCurrentMap()" class="bg-slate-800 hover:bg-red-900 text-slate-400 px-2 py-1 rounded text-xs border border-slate-700">刪除</button>
-                        </div>
-                        <div id="spatial-grid-container" class="grid gap-1.5 aspect-square bg-slate-950 p-2 rounded-xl border border-slate-800 mx-auto w-full max-w-[320px]"></div>
-                        <p class="text-center text-[10px] text-slate-500 mt-2">點擊網格開啟【深度設定面板】，可自訂底色與細節</p>
-                    </div>
-
-                    <!-- 人物心智圖 -->
-                    <div class="bg-slate-900 rounded-2xl p-5 border border-amber-900/50 shadow-xl flex flex-col h-[500px]">
-                        <h2 class="text-base font-bold text-amber-400 mb-2">👥 角色深度設定與關係網</h2>
-                        <div class="flex flex-wrap gap-2 mb-3 bg-slate-800 p-2 rounded-xl">
-                            <input type="text" id="newCharName" placeholder="角色名字" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-slate-200 flex-1 min-w-[80px]">
-                            <select id="newCharRole" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-slate-200">
-                                <option value="main">大圓</option><option value="sub">中圓</option><option value="extra">小圓</option>
-                            </select>
-                            <button onclick="addCharacter()" class="bg-amber-600 px-3 py-1.5 rounded text-xs text-white">新增</button>
-                        </div>
-                        <div class="flex flex-wrap gap-2 mb-3 bg-slate-800 p-2 rounded-xl items-center">
-                            <select id="relCharA" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs flex-1 min-w-[60px]"></select>
-                            <span class="text-slate-500 text-xs">與</span>
-                            <select id="relCharB" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs flex-1 min-w-[60px]"></select>
-                            <input type="text" id="relLabel" placeholder="關係" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs w-16">
-                            <button onclick="addRelationship()" class="bg-cyan-600 px-3 py-1.5 rounded text-xs text-white">連線</button>
-                        </div>
-                        <div class="relative flex-1 min-h-[250px] bg-slate-950 rounded-xl border border-slate-800 overflow-hidden" id="mindmap-container">
-                            <svg id="mindmap-svg"></svg>
-                        </div>
-                        <p class="text-center text-[10px] text-slate-500 mt-2">點擊人物圓圈開啟【深度設定面板】</p>
-                    </div>
-                </div>
-
-                <!-- 時間軸管理放在最下方 -->
-                <div class="bg-slate-900 rounded-2xl p-5 border border-cyan-900/50 shadow-xl">
-                    <h2 class="text-base font-bold text-cyan-400 mb-3">⏳ 管理時間軸</h2>
-                    <div class="flex gap-2 mb-3">
-                        <input type="text" id="newTimelineName" placeholder="例如：地球時間、奧菲斯時間" class="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs flex-1 text-white">
-                        <select id="newTimelineScope" class="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-white">
-                            <option value="day">尺度：天</option><option value="month">尺度：月</option><option value="year">尺度：年</option>
+            <!-- 軌道 1：時間軸 15% height -->
+            <div class="h-[15%] bg-slate-900 border-b border-slate-800 p-3 flex flex-col">
+                <div class="flex justify-between items-center mb-2 shrink-0">
+                    <span class="text-xs font-bold text-cyan-400">1. 時間軸 (Time)</span>
+                    <div class="flex gap-2">
+                        <select id="timeScale" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white outline-none">
+                            <option value="hour">1 小時</option><option value="day">1 天</option><option value="month">1 個月</option>
+                            <option value="year" selected>1 年</option><option value="decade">10 年</option><option value="century">100 年</option>
+                            <option value="epoch">10000 年</option>
                         </select>
-                        <button onclick="addTimeline()" class="bg-cyan-600 text-white px-3 py-1.5 rounded text-xs">新增</button>
+                        <input type="text" id="timeRange" placeholder="指定區間 (例: 1年1月 12:00)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[10px] text-white outline-none w-40">
+                        <button onclick="saveTimeRange()" class="bg-cyan-600 text-white px-2 py-1 rounded text-[10px]">綁定至本卡片</button>
                     </div>
-                    <div id="timeline-list" class="space-y-2 max-h-32 overflow-y-auto"></div>
+                </div>
+                <div class="flex-1 bg-slate-950 rounded-lg border border-slate-800 relative overflow-hidden flex items-center px-4">
+                    <div class="w-full h-0.5 bg-cyan-900/50 relative">
+                        <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-cyan-500 text-[9px] px-2 py-0.5 rounded text-white font-bold" id="currentTimeLabel">未指定時間</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- 視圖 2：2x2 寫作區與視覺化時間軸 -->
-            <div id="view-editor" class="hidden flex-col gap-8 animate-fade-in">
+            <!-- 軌道 2：劇情方塊 45% height -->
+            <div class="h-[45%] bg-slate-950 border-b border-slate-800 p-4 flex flex-col items-center justify-center relative">
+                <div class="absolute top-3 left-4 text-xs font-bold text-white">2. 劇情方塊 (Story)</div>
+                <button onclick="zoomOut()" id="btnZoomOut" class="absolute top-3 right-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-3 py-1 rounded text-xs hidden shadow-lg">↑ 回上層</button>
+
+                <div class="w-full max-w-4xl h-full grid grid-cols-2 grid-rows-2 gap-3 pt-6 pb-2">
+                    <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 flex flex-col relative group">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[11px] font-bold text-cyan-400">起 (Hook)</span>
+                            <button onclick="zoomIn('hook')" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-cyan-500 hover:bg-cyan-900">↘ 鑽入</button>
+                        </div>
+                        <textarea id="val-hook" onchange="autoSaveText()" class="flex-1 bg-transparent text-sm text-slate-300 resize-none outline-none hide-scroll" placeholder="環境與動機..."></textarea>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 flex flex-col relative group">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[11px] font-bold text-emerald-400">承 (Develop)</span>
+                            <button onclick="zoomIn('develop')" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-emerald-500 hover:bg-emerald-900">↘ 鑽入</button>
+                        </div>
+                        <textarea id="val-develop" onchange="autoSaveText()" class="flex-1 bg-transparent text-sm text-slate-300 resize-none outline-none hide-scroll" placeholder="互動與推進..."></textarea>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 flex flex-col relative group">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[11px] font-bold text-rose-400">合 (Resolution)</span>
+                            <button onclick="zoomIn('resolution')" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-rose-500 hover:bg-rose-900">↘ 鑽入</button>
+                        </div>
+                        <textarea id="val-resolution" onchange="autoSaveText()" class="flex-1 bg-transparent text-sm text-slate-300 resize-none outline-none hide-scroll" placeholder="收尾與懸念..."></textarea>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 flex flex-col relative group">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[11px] font-bold text-amber-400">轉 (Twist)</span>
+                            <button onclick="zoomIn('twist')" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-amber-500 hover:bg-amber-900">↘ 鑽入</button>
+                        </div>
+                        <textarea id="val-twist" onchange="autoSaveText()" class="flex-1 bg-transparent text-sm text-slate-300 resize-none outline-none hide-scroll" placeholder="衝突與轉折..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 軌道 3：人物關係圖 25% height -->
+            <div class="h-[25%] bg-slate-900 border-b border-slate-800 p-3 flex flex-col relative overflow-hidden">
+                <div class="flex justify-between items-center mb-2 shrink-0 z-10 relative">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-bold text-amber-400">3. 人物維基 (Characters)</span>
+                        <span class="text-[10px] text-slate-500">單擊綁定劇情卡 / 雙擊查看詳細資料</span>
+                    </div>
+                    <button onclick="openCharAddModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded text-[10px] border border-slate-600">+ 新增人物/關係</button>
+                </div>
+                <div class="flex-1 relative w-full" id="mindmap-container">
+                    <svg id="mindmap-svg"></svg>
+                </div>
+            </div>
+
+            <!-- 軌道 4：地點軸 15% height -->
+            <div class="h-[15%] bg-slate-950 p-3 flex flex-col relative">
+                <div class="flex justify-between items-center mb-2 shrink-0 z-10">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-bold text-emerald-400">4. 地點軸 (Locations)</span>
+                        <span class="text-[10px] text-slate-500">單擊綁定劇情卡 / 雙擊查看詳細資料</span>
+                    </div>
+                    <!-- 新增：群組化模式按鈕 -->
+                    <div class="flex gap-2 items-center">
+                        <button id="btnGroupLoc" onclick="toggleGroupMode()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded text-[10px] border border-slate-600 transition-colors">⊞ 群組化區域</button>
+                        <button id="btnConfirmGroup" onclick="createLocationGroup()" class="hidden bg-emerald-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow-lg animate-pulse">合併選取區域</button>
+                    </div>
+                </div>
                 
-                <!-- 上半部：2x2 劇情編輯器 -->
-                <div class="bg-slate-900 rounded-3xl p-5 lg:p-8 border border-slate-700 shadow-2xl">
-                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-slate-800 pb-4">
-                        <h2 class="text-xl font-bold text-white whitespace-nowrap" id="editorTitle">📝 撰寫場景 (分鏡模式)</h2>
-                        <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto" id="novel-selectors">
-                            <select id="card-timeline-select" onchange="renderTimeSelectors()" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-cyan-300 outline-none w-full sm:w-auto"></select>
-                            <select id="card-map-select" onchange="renderLocationCheckboxes()" class="bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-emerald-300 outline-none w-full sm:w-auto"></select>
-                        </div>
-                    </div>
-
-                    <!-- 動態時空選擇器 -->
-                    <div class="flex flex-col lg:flex-row gap-4 mb-6">
-                        <div class="flex-1 bg-slate-800/50 p-3 rounded-xl border border-cyan-900/30">
-                            <label class="text-[10px] font-bold text-cyan-500 mb-2 block">精確時間</label>
-                            <div id="dynamic-time-selectors" class="flex flex-wrap gap-2"></div>
-                        </div>
-                        <div class="flex-1 bg-slate-800/50 p-3 rounded-xl border border-emerald-900/30" id="loc-checkbox-wrapper">
-                            <label class="text-[10px] font-bold text-emerald-500 mb-2 block">觸發網格 (決定方塊底色)</label>
-                            <div id="card-location-checkboxes" class="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto"></div>
-                        </div>
-                        <div class="flex-1 bg-slate-800/50 p-3 rounded-xl border border-amber-900/30" id="char-checkbox-wrapper">
-                            <label class="text-[10px] font-bold text-amber-500 mb-2 block">登場角色</label>
-                            <div id="card-character-checkboxes" class="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto"></div>
-                        </div>
-                    </div>
-
-                    <!-- 2x2 結構化輸入區 -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <!-- 起 -->
-                        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 flex flex-col gap-2">
-                            <span class="text-[11px] font-bold text-cyan-400">1. 起 (Hook) - 環境與動機</span>
-                            <div class="img-upload-box h-16 rounded flex items-center justify-center text-slate-500 text-[10px]">+ 概念圖</div>
-                            <textarea id="storyHook" class="w-full h-20 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white resize-none focus:border-cyan-500 outline-none"></textarea>
-                        </div>
-                        <!-- 承 -->
-                        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 flex flex-col gap-2">
-                            <span class="text-[11px] font-bold text-emerald-400">2. 承 (Develop) - 互動與推進</span>
-                            <div class="img-upload-box h-16 rounded flex items-center justify-center text-slate-500 text-[10px]">+ 中景圖</div>
-                            <textarea id="storyDevelop" class="w-full h-20 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white resize-none focus:border-emerald-500 outline-none"></textarea>
-                        </div>
-                        <!-- 轉 -->
-                        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 flex flex-col gap-2">
-                            <span class="text-[11px] font-bold text-amber-400">3. 轉 (Twist) - 衝突與意外</span>
-                            <div class="img-upload-box h-16 rounded flex items-center justify-center text-slate-500 text-[10px]">+ 特寫圖</div>
-                            <textarea id="storyTwist" class="w-full h-20 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white resize-none focus:border-amber-500 outline-none"></textarea>
-                        </div>
-                        <!-- 合 -->
-                        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 flex flex-col gap-2">
-                            <span class="text-[11px] font-bold text-rose-400">4. 合 (Resolution) - 收尾與懸念</span>
-                            <div class="img-upload-box h-16 rounded flex items-center justify-center text-slate-500 text-[10px]">+ 光影圖</div>
-                            <textarea id="storyResolution" class="w-full h-20 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white resize-none focus:border-rose-500 outline-none"></textarea>
-                        </div>
-                    </div>
-
-                    <div class="flex gap-3">
-                        <button id="cancelBtn" onclick="cancelEdit()" class="hidden px-4 py-3 rounded-xl bg-slate-800 text-slate-400 text-sm font-bold border border-slate-700">取消編輯</button>
-                        <button id="submitBtn" onclick="saveStoryCard()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-sm font-bold shadow-[0_0_15px_rgba(8,145,178,0.5)] hover:opacity-90 transition-opacity">
-                            📥 發布至時間軌道
-                        </button>
-                    </div>
+                <div class="flex-1 flex flex-nowrap overflow-x-auto hide-scroll gap-3 items-center px-1 pb-1" id="location-track">
+                    <!-- JS 生成 -->
                 </div>
-
-                <!-- 下半部：全寬度時間軸方塊 -->
-                <div class="w-full">
-                    <div class="flex justify-between items-end mb-4">
-                        <div>
-                            <h2 class="text-xl font-bold text-white">📑 視覺化時間軌道 (<span id="cardCount">0</span>)</h2>
-                            <p class="text-xs text-slate-400 mt-1">方塊底色對應發生地點的代表色</p>
-                        </div>
-                        <input type="text" id="searchInput" oninput="renderCards()" placeholder="🔍 搜尋劇情..." class="bg-slate-900 border border-slate-700 rounded-full px-4 py-2 text-xs w-32 md:w-48 text-white focus:border-cyan-500 outline-none">
-                    </div>
-                    
-                    <div class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
-                        <!-- 貫穿中央的線 -->
-                        <div class="absolute top-1/2 left-0 w-full h-1 bg-slate-800 -translate-y-1/2 z-0"></div>
-                        <!-- 水平捲動容器 -->
-                        <div class="flex gap-4 md:gap-6 items-center min-w-max relative z-10 timeline-track-container overflow-x-auto pb-4 pt-2" id="timeline-track">
-                            <!-- 動態生成方塊 -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- ==================== 彈出視窗 (Modals) ==================== -->
-    
-    <!-- 地點深度設定 Modal -->
-    <div id="locModal" class="hidden fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row">
-            <div class="flex-1 p-6 space-y-4">
-                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-                    <h3 class="text-lg font-bold text-emerald-400">📍 地點深度設定</h3>
-                    <button onclick="closeModal('locModal')" class="text-slate-500 hover:text-white">✕</button>
-                </div>
-                <div class="space-y-3">
-                    <div><label class="text-[10px] text-slate-500">網格名稱</label><input type="text" id="m-locName" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white outline-none"></div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="text-[10px] text-slate-500">代表色 (時間軸底色)</label>
-                            <input type="color" id="m-locColor" class="w-full h-9 bg-slate-800 border border-slate-600 rounded cursor-pointer">
-                        </div>
-                        <div><label class="text-[10px] text-slate-500">範圍大小</label><input type="text" id="m-locSize" placeholder="例如: 100km²" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white outline-none"></div>
-                    </div>
-                    <div><label class="text-[10px] text-slate-500">地理特徵</label><input type="text" id="m-locGeo" placeholder="例如: 冰原、輻射區" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white outline-none"></div>
-                    <div><label class="text-[10px] text-slate-500">功能與建物性質</label><textarea id="m-locFunc" class="w-full h-16 bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white resize-none outline-none"></textarea></div>
-                </div>
-                <div class="flex gap-2 pt-2">
-                    <button id="btnDelLoc" class="px-3 py-2 rounded bg-slate-800 hover:bg-red-900/50 text-red-400 text-xs border border-slate-700">清除此格</button>
-                    <button onclick="saveLocationModal()" class="flex-1 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">儲存設定</button>
-                </div>
-            </div>
-            <div class="w-full md:w-1/3 bg-slate-800 p-6 flex flex-col items-center justify-center border-l border-slate-700">
-                <div class="w-32 h-32 rounded-lg border-2 dashed border-slate-600 flex items-center justify-center text-slate-500 text-xs text-center cursor-pointer hover:border-emerald-500 bg-slate-900">+<br>場景概念圖<br>(開發中)</div>
             </div>
         </div>
     </div>
 
-    <!-- 角色深度設定 Modal -->
-    <div id="charModal" class="hidden fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
-            <div class="flex-1 p-6 space-y-4 overflow-y-auto">
-                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-                    <h3 class="text-lg font-bold text-amber-400">👥 角色深度面板</h3>
-                    <button onclick="closeModal('charModal')" class="text-slate-500 hover:text-white">✕</button>
+    <!-- ==================== 彈出面板 ==================== -->
+    
+    <!-- 快速新增人物/關係 Modal -->
+    <div id="charAddModal" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl p-6">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <h3 class="text-base font-bold text-amber-400">快速建立節點</h3>
+                <button onclick="closeModal('charAddModal')" class="text-slate-500 hover:text-white">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                    <div class="flex gap-2">
+                        <input type="text" id="add-charName" placeholder="角色名稱" class="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-white outline-none">
+                        <select id="add-charAlign" class="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-white outline-none">
+                            <option value="good">正派(方)</option><option value="evil">反派(三角)</option><option value="neutral">中立(圓)</option>
+                        </select>
+                        <select id="add-charSize" class="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-white outline-none">
+                            <option value="main">主角(大)</option><option value="sub">配角(中)</option><option value="extra">路人(小)</option>
+                        </select>
+                        <button onclick="quickAddCharacter()" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs">新增</button>
+                    </div>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="col-span-2 md:col-span-1"><label class="text-[10px] text-slate-500">姓名</label><input type="text" id="m-charName" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
-                    <div class="col-span-2 md:col-span-1"><label class="text-[10px] text-slate-500">外號/代號</label><input type="text" id="m-charAlias" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
-                    <div><label class="text-[10px] text-slate-500">年齡/性別</label><input type="text" id="m-charAge" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
-                    <div><label class="text-[10px] text-slate-500">身高/體型</label><input type="text" id="m-charHeight" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
-                    <div><label class="text-[10px] text-slate-500">星座</label><input type="text" id="m-charZodiac" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
-                    <div><label class="text-[10px] text-slate-500">MBTI 人格</label><input type="text" id="m-charMbti" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
-                    <div class="col-span-2"><label class="text-[10px] text-slate-500">穿衣風格</label><input type="text" id="m-charClothing" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
-                    <div class="col-span-2"><label class="text-[10px] text-slate-500">核心特徵 (如: 左眼盲、習慣摸下巴)</label><textarea id="m-charTraits" class="w-full h-12 bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white resize-none outline-none"></textarea></div>
-                </div>
-                <div class="flex gap-2 pt-2">
-                    <button id="btnDelChar" class="px-3 py-2 rounded bg-slate-800 hover:bg-red-900/50 text-red-400 text-xs border border-slate-700">刪除角色</button>
-                    <button onclick="saveCharacterModal()" class="flex-1 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold">儲存設定</button>
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                    <div class="flex gap-2 items-center">
+                        <select id="relCharA" class="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-white outline-none"></select>
+                        <span class="text-xs text-slate-500">與</span>
+                        <select id="relCharB" class="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-white outline-none"></select>
+                        <input type="text" id="relLabel" placeholder="關係" class="w-16 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-white outline-none">
+                        <button onclick="quickAddRelationship()" class="bg-cyan-600 text-white px-3 py-1.5 rounded text-xs">連線</button>
+                    </div>
                 </div>
             </div>
-            <div class="w-full md:w-1/3 bg-slate-800 p-6 flex flex-col items-center border-t md:border-t-0 md:border-l border-slate-700">
-                <div class="w-40 h-56 rounded-lg border-2 dashed border-slate-600 flex items-center justify-center text-slate-500 text-xs text-center cursor-pointer hover:border-amber-500 bg-slate-900">+<br>角色概念圖<br>(開發中)</div>
+            <div class="mt-4 pt-4 border-t border-slate-800 text-right">
+                <button onclick="closeModal('charAddModal')" class="bg-slate-700 text-white px-4 py-2 rounded text-xs">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 角色詳細 Wiki 面板 -->
+    <div id="charProfileModal" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <h3 class="text-lg font-bold text-amber-400">👤 角色檔案 (Wiki)</h3>
+                <button onclick="closeModal('charProfileModal')" class="text-slate-500 hover:text-white">✕</button>
+            </div>
+            <div class="space-y-4">
+                <input type="hidden" id="p-charId">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="col-span-2"><label class="text-[10px] text-slate-500">本名</label><input type="text" id="p-charName" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"></div>
+                    <div class="col-span-2"><label class="text-[10px] text-slate-500">外號 / 代號</label><input type="text" id="p-charAlias" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"></div>
+                    <div><label class="text-[10px] text-slate-500">年齡</label><input type="text" id="p-charAge" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"></div>
+                    <div><label class="text-[10px] text-slate-500">身高</label><input type="text" id="p-charHeight" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"></div>
+                    <div><label class="text-[10px] text-slate-500">陣營形狀</label>
+                        <select id="p-charAlign" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"><option value="good">正派</option><option value="evil">反派</option><option value="neutral">中立</option></select>
+                    </div>
+                    <div><label class="text-[10px] text-slate-500">階級大小</label>
+                        <select id="p-charSize" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"><option value="main">主角</option><option value="sub">配角</option><option value="extra">路人</option></select>
+                    </div>
+                    <div><label class="text-[10px] text-slate-500">星座</label><input type="text" id="p-charZodiac" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"></div>
+                    <div><label class="text-[10px] text-slate-500">MBTI</label><input type="text" id="p-charMbti" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"></div>
+                    <div class="col-span-2"><label class="text-[10px] text-slate-500">穿衣風格</label><input type="text" id="p-charClothing" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white"></div>
+                </div>
+                <div><label class="text-[10px] text-slate-500">核心特徵 (傷疤、習慣動作等)</label><textarea id="p-charTraits" class="w-full h-16 bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white resize-none"></textarea></div>
+                <div><label class="text-[10px] text-slate-500">背景故事與動機</label><textarea id="p-charDesc" class="w-full h-24 bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white resize-none"></textarea></div>
+                
+                <div class="flex justify-between mt-4 border-t border-slate-800 pt-4">
+                    <button onclick="deleteCharacterProfile()" class="bg-slate-800 hover:bg-red-900/50 text-red-400 px-3 py-2 rounded text-xs border border-slate-700">刪除角色</button>
+                    <button onclick="saveCharacterProfile()" class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded text-sm font-bold">儲存檔案</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 地點詳細 Wiki 面板 -->
+    <div id="locProfileModal" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl p-6">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <h3 class="text-lg font-bold text-emerald-400">📍 地點檔案 (Wiki)</h3>
+                <button onclick="closeModal('locProfileModal')" class="text-slate-500 hover:text-white">✕</button>
+            </div>
+            <div class="space-y-3">
+                <input type="hidden" id="p-locId">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2"><label class="text-[10px] text-slate-500">地點名稱</label><input type="text" id="p-locName" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
+                    <div><label class="text-[10px] text-slate-500">所屬群組區域 (清除可解散群組)</label><input type="text" id="p-locRegion" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none" placeholder="無區域"></div>
+                    <div><label class="text-[10px] text-slate-500">區域/代表底色</label><input type="color" id="p-locColor" class="w-full h-8 bg-slate-800 border border-slate-600 rounded cursor-pointer p-0.5"></div>
+                    <div class="col-span-2"><label class="text-[10px] text-slate-500">範圍與地理特徵</label><input type="text" id="p-locGeo" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none"></div>
+                    <div class="col-span-2"><label class="text-[10px] text-slate-500">功能與建物性質</label><textarea id="p-locFunc" class="w-full h-16 bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white resize-none outline-none"></textarea></div>
+                </div>
+                <div class="flex justify-between mt-4 border-t border-slate-800 pt-4">
+                    <button onclick="deleteLocationProfile()" class="bg-slate-800 hover:bg-red-900/50 text-red-400 px-3 py-2 rounded text-xs border border-slate-700">刪除此地點</button>
+                    <button onclick="saveLocationProfile()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded text-sm font-bold">儲存檔案</button>
+                </div>
             </div>
         </div>
     </div>
@@ -307,585 +269,411 @@
             appId: "1:730038256784:web:976415daf4c99e1a3b0415"
         };
         
-        let useCloud = false;
-        let dbRef = null;
+        let useCloud = false, dbRef = null;
         if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
             firebase.initializeApp(firebaseConfig);
-            dbRef = firebase.database().ref('solos_data_v4');
+            dbRef = firebase.database().ref('quadrama_v3');
             useCloud = true;
         }
 
-        let appData = { projects: [] };
-        let activeProject = null;
-        let editingCardId = null;
-        let activeLocIndex = null;
-        let activeCharId = null;
-        const DEFAULT_COLOR = '#1e293b';
+        // ==================== 全域變數與狀態 ====================
+        let appData = { stories: [] };
+        let currentStory = null;
+        let currentNodeId = 'root'; 
+        let navBreadcrumbs = []; 
+        const COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#64748b'];
 
-        // ==================== 2. 核心架構升級 (相容性與讀取) ====================
+        // 群組化模式狀態
+        let isGroupingMode = false;
+        let selectedForGroup = [];
+
         function initApp() {
             if (useCloud) {
                 dbRef.on('value', (snapshot) => {
                     const data = snapshot.val();
                     if (data) appData = data;
-                    if (!appData.projects) appData.projects = [];
-                    upgradeDataStructure(); // 確保舊資料升級為物件格式
-                    
-                    if (!activeProject) renderHome();
+                    if (!appData.stories) appData.stories = [];
+                    upgradeData();
+                    if (!currentStory) renderHome();
                     else {
-                        activeProject = appData.projects.find(p => p.id === activeProject.id);
-                        if(activeProject) {
-                            if (document.getElementById('view-setup').style.display !== 'none') renderSetupView();
-                            else { renderEditorView(); renderCards(); }
-                        } else backToHome();
+                        currentStory = appData.stories.find(s => s.id === currentStory.id);
+                        if(currentStory) renderWorkspace(); else backToHome();
                     }
-                    document.getElementById('sync-status').innerText = "🟢 雲端同步中";
                 });
             } else {
-                document.getElementById('sync-status').innerText = "🟡 離線模式";
-                try {
-                    const saved = localStorage.getItem('solos_local_v4');
-                    if (saved) appData = JSON.parse(saved);
-                } catch (e) {}
-                upgradeDataStructure();
-                renderHome();
+                try { const saved = localStorage.getItem('quadrama_local_v3'); if (saved) appData = JSON.parse(saved); } catch (e) {}
+                if (!appData.stories) appData.stories = [];
+                upgradeData(); renderHome();
             }
         }
 
-        // 強制將字串地點轉換為帶有色彩與細節的物件
-        function upgradeDataStructure() {
-            appData.projects.forEach(p => {
-                if(p.worldConfig && p.worldConfig.maps) {
-                    p.worldConfig.maps.forEach(m => {
-                        m.locations = m.locations.map(loc => {
-                            if (typeof loc === 'string') {
-                                return { id: 'loc_'+Math.random().toString(36).substr(2,9), name: loc.trim(), color: DEFAULT_COLOR, size: '', geo: '', func: '' };
-                            }
-                            if (!loc) return { id: 'loc_'+Math.random().toString(36).substr(2,9), name: '', color: DEFAULT_COLOR, size: '', geo: '', func: '' };
-                            return loc;
-                        });
-                    });
+        function saveGlobal() {
+            if (useCloud) dbRef.set(appData);
+            else localStorage.setItem('quadrama_local_v3', JSON.stringify(appData));
+        }
+
+        function upgradeData() {
+            appData.stories.forEach(s => {
+                if(s.chars) {
+                    s.chars = s.chars.map(c => ({ alias:'', age:'', height:'', zodiac:'', mbti:'', clothing:'', traits:'', desc:'', ...c }));
                 }
-                if(p.worldConfig && p.worldConfig.characters) {
-                    p.worldConfig.characters = p.worldConfig.characters.map(c => {
-                        return { alias: '', age: '', height: '', zodiac: '', mbti: '', clothing: '', traits: '', ...c };
-                    });
+                if(s.locs) {
+                    s.locs = s.locs.map(l => ({ region:'', geo:'', func:'', desc:'', ...l }));
                 }
             });
         }
 
-        function saveGlobalData() {
-            if (useCloud) dbRef.set(appData);
-            else localStorage.setItem('solos_local_v4', JSON.stringify(appData));
-        }
-
-        // ==================== 3. 首頁大廳 ====================
+        // ==================== 首頁大廳 ====================
         function renderHome() {
-            const novelList = document.getElementById('novel-list');
-            const diaryList = document.getElementById('diary-list');
-            novelList.innerHTML = ''; diaryList.innerHTML = '';
-
-            const novels = (appData.projects || []).filter(p => p.type === 'novel');
-            const diaries = (appData.projects || []).filter(p => p.type === 'diary');
-
-            if (novels.length === 0) novelList.innerHTML = '<div class="text-slate-500 text-xs text-center py-4">無資料</div>';
-            if (diaries.length === 0) diaryList.innerHTML = '<div class="text-slate-500 text-xs text-center py-4">無資料</div>';
-
-            const createCardHTML = (proj, icon) => `
-                <div class="project-card flex justify-between items-center bg-slate-800/80 p-3 rounded-xl border border-slate-700 cursor-pointer hover:border-cyan-500 transition-colors" onclick="openProject('${proj.id}')">
-                    <div class="overflow-hidden">
-                        <h3 class="text-white text-sm font-bold flex items-center gap-2 truncate">${icon} ${proj.title}</h3>
-                        <p class="text-[10px] text-slate-400 mt-1 truncate">${proj.updatedAt} | 紀錄數: ${(proj.storyCards||[]).length}</p>
-                    </div>
-                    <button onclick="event.stopPropagation(); deleteProject('${proj.id}')" class="text-slate-500 hover:text-red-400 px-2 py-1 text-xs shrink-0">刪除</button>
-                </div>
-            `;
-
-            novels.sort((a,b)=>b.lastTimestamp - a.lastTimestamp).forEach(p => novelList.innerHTML += createCardHTML(p, '📘'));
-            diaries.sort((a,b)=>b.lastTimestamp - a.lastTimestamp).forEach(p => diaryList.innerHTML += createCardHTML(p, '📝'));
+            const list = document.getElementById('story-list');
+            list.innerHTML = '';
+            if (appData.stories.length === 0) { list.innerHTML = '<div class="text-slate-600 text-sm text-center py-6">點擊右上角 + 建立第一個故事</div>'; return; }
+            appData.stories.sort((a,b)=>b.updatedAt - a.updatedAt).forEach(s => {
+                list.innerHTML += `
+                    <div class="flex justify-between items-center bg-slate-800/50 hover:bg-slate-800 p-4 rounded-xl border border-slate-700 cursor-pointer transition-colors" onclick="openStory('${s.id}')">
+                        <div><h3 class="text-white font-bold text-lg">${s.title}</h3><p class="text-[10px] text-slate-500 mt-1">最後編輯: ${new Date(s.updatedAt).toLocaleString()}</p></div>
+                        <button onclick="event.stopPropagation(); deleteStory('${s.id}')" class="text-slate-600 hover:text-red-500 px-2 py-1 text-xs">刪除</button>
+                    </div>`;
+            });
         }
-
-        function createNewProject(type) {
-            const title = prompt(`新${type === 'novel' ? '小說' : '日記'}命名：`, `未命名`);
-            if (!title) return;
-            const newProj = {
-                id: 'proj_' + Date.now(), type: type, title: title.trim(), updatedAt: new Date().toLocaleString(), lastTimestamp: Date.now(),
-                worldConfig: { 
-                    timelines: [{ id: 'tl_main', name: '主要時間', scope: type === 'diary' ? 'day' : 'year' }],
-                    maps: [{ id: 'map_main', name: '預設地圖', size: 9, locations: Array(9).fill({id:'', name:'', color:DEFAULT_COLOR}) }], 
-                    characters: [], relationships: [] 
-                },
-                storyCards: []
+        function createNewProject() {
+            const title = prompt('請輸入故事名稱：'); if (!title) return;
+            const newStory = {
+                id: 'story_' + Date.now(), title: title.trim(), updatedAt: Date.now(),
+                chars: [], rels: [], locs: [],
+                nodes: [{ id: 'root', timeConfig: { scale: 'year', range: '' }, texts: { hook:'', develop:'', twist:'', resolution:'' }, children: { hook:null, develop:null, twist:null, resolution:null }, linkedChars: [], linkedLocs: [] }]
             };
-            appData.projects.push(newProj); saveGlobalData(); openProject(newProj.id);
+            appData.stories.push(newStory); saveGlobal(); openStory(newStory.id);
         }
-
-        function deleteProject(id) {
-            if (confirm("永久刪除這個專案？")) { appData.projects = appData.projects.filter(p => p.id !== id); saveGlobalData(); renderHome(); }
-        }
-
-        function openProject(id) {
-            activeProject = appData.projects.find(p => p.id === id);
-            if (!activeProject) return;
+        function deleteStory(id) { if (confirm("永久刪除此故事？")) { appData.stories = appData.stories.filter(s => s.id !== id); saveGlobal(); renderHome(); } }
+        function openStory(id) {
+            currentStory = appData.stories.find(s => s.id === id); if (!currentStory) return;
             document.getElementById('screen-home').style.display = 'none';
-            document.getElementById('screen-workspace').style.display = 'block';
-            document.getElementById('workspace-title').innerText = activeProject.title;
+            document.getElementById('screen-workspace').style.display = 'flex';
+            document.getElementById('workspace-title').innerText = currentStory.title;
+            currentNodeId = 'root'; navBreadcrumbs = [{ id: 'root', label: '主宇宙' }];
+            isGroupingMode = false; selectedForGroup = [];
+            renderWorkspace();
+        }
+        function backToHome() { document.getElementById('screen-home').style.display = 'flex'; document.getElementById('screen-workspace').style.display = 'none'; currentStory = null; renderHome(); }
 
-            if (activeProject.type === 'diary') {
-                document.getElementById('workspace-type').innerText = '📓 日記模式';
-                document.getElementById('workspace-tabs').style.display = 'none';
-                document.getElementById('novel-selectors').style.display = 'none';
-                switchView('editor'); 
-            } else {
-                document.getElementById('workspace-type').innerText = '🌌 視覺敘事引擎';
-                document.getElementById('workspace-tabs').style.display = 'flex';
-                document.getElementById('novel-selectors').style.display = 'flex';
-                switchView('setup');
+        // ==================== 工作區渲染 ====================
+        function renderWorkspace() {
+            if(!currentStory) return;
+            renderBreadcrumbs(); renderTimelineRow(); renderStoryGrid(); renderCharacterRow(); renderLocationRow();
+        }
+
+        // --- 軌道 1：時間軸 ---
+        function renderTimelineRow() {
+            const node = currentStory.nodes.find(n => n.id === currentNodeId); if(!node) return;
+            document.getElementById('timeScale').value = node.timeConfig.scale || 'year';
+            document.getElementById('timeRange').value = node.timeConfig.range || '';
+            const lbl = document.getElementById('currentTimeLabel');
+            lbl.innerText = node.timeConfig.range ? node.timeConfig.range : '未綁定時間';
+            lbl.className = node.timeConfig.range ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-cyan-600 text-[10px] px-3 py-1 rounded-full text-white font-bold shadow-lg" : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-700 text-[9px] px-2 py-0.5 rounded text-slate-400";
+        }
+        function saveTimeRange() {
+            const node = currentStory.nodes.find(n => n.id === currentNodeId);
+            node.timeConfig.scale = document.getElementById('timeScale').value; node.timeConfig.range = document.getElementById('timeRange').value.trim();
+            currentStory.updatedAt = Date.now(); saveGlobal(); renderTimelineRow();
+        }
+
+        // --- 軌道 2：劇情方塊 ---
+        function renderStoryGrid() {
+            const node = currentStory.nodes.find(n => n.id === currentNodeId); if(!node) return;
+            ['hook','develop','resolution','twist'].forEach(k => document.getElementById('val-'+k).value = node.texts[k] || '');
+            document.getElementById('btnZoomOut').style.display = currentNodeId === 'root' ? 'none' : 'block';
+        }
+        function autoSaveText() {
+            const node = currentStory.nodes.find(n => n.id === currentNodeId);
+            ['hook','develop','resolution','twist'].forEach(k => node.texts[k] = document.getElementById('val-'+k).value);
+            currentStory.updatedAt = Date.now(); saveGlobal();
+        }
+        function renderBreadcrumbs() {
+            document.getElementById('breadcrumb-container').innerHTML = navBreadcrumbs.map((b, i) => {
+                const isLast = i === navBreadcrumbs.length - 1;
+                return `<button onclick="jumpToNode(${i})" class="${isLast?'text-white font-bold':'text-slate-500 hover:text-cyan-400'} transition-colors">${b.label}</button>${!isLast?'<span class="text-slate-700 px-1">/</span>':''}`;
+            }).join('');
+        }
+        function jumpToNode(i) { autoSaveText(); currentNodeId = navBreadcrumbs[i].id; navBreadcrumbs = navBreadcrumbs.slice(0, i + 1); renderWorkspace(); }
+        function zoomIn(q) {
+            autoSaveText(); const node = currentStory.nodes.find(n => n.id === currentNodeId);
+            let childId = node.children[q];
+            const labels = { hook:'起', develop:'承', twist:'轉', resolution:'合' };
+            if (!childId) {
+                childId = 'n_' + Date.now() + Math.random().toString(36).substr(2,4); node.children[q] = childId;
+                currentStory.nodes.push({ id: childId, parentId: currentNodeId, timeConfig: { scale: 'day', range: '' }, texts: { hook:'', develop:'', twist:'', resolution:'' }, children: { hook:null, develop:null, twist:null, resolution:null }, linkedChars: [], linkedLocs: [] });
+                saveGlobal();
             }
+            currentNodeId = childId; navBreadcrumbs.push({ id: childId, label: labels[q] }); renderWorkspace();
         }
+        function zoomOut() { autoSaveText(); if (navBreadcrumbs.length > 1) jumpToNode(navBreadcrumbs.length - 2); }
 
-        function backToHome() { 
-            document.getElementById('screen-home').style.display = 'block';
-            document.getElementById('screen-workspace').style.display = 'none';
-            activeProject = null; cancelEdit(); renderHome(); 
-        }
-
-        function saveProject() {
-            if (!activeProject) return;
-            activeProject.updatedAt = new Date().toLocaleString();
-            activeProject.lastTimestamp = Date.now();
-            saveGlobalData(); 
-        }
-
-        function switchView(view) {
-            if (!activeProject) return;
-            const isSetup = view === 'setup';
-            document.getElementById('btn-setup').className = `tab-btn flex-1 md:flex-none px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold ${isSetup?'tab-active':'tab-inactive'}`;
-            document.getElementById('btn-editor').className = `tab-btn flex-1 md:flex-none px-3 md:px-6 py-2 rounded-md text-xs md:text-sm font-bold ${!isSetup?'tab-active':'tab-inactive'}`;
-            document.getElementById('view-setup').style.display = isSetup ? 'block' : 'none';
-            document.getElementById('view-editor').style.display = !isSetup ? 'flex' : 'none';
-            
-            if (isSetup) renderSetupView(); else { renderEditorView(); renderCards(); }
-        }
-
-        // ==================== 4. Modal 控制邏輯 ====================
-        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-        
-        function openLocationModal(index) {
-            activeLocIndex = index;
-            const mapSelect = document.getElementById('map-selector');
-            const mapId = mapSelect.value;
-            const map = activeProject.worldConfig.maps.find(m => m.id === mapId);
-            const loc = map.locations[index] || { name:'', color:DEFAULT_COLOR, size:'', geo:'', func:'' };
-            
-            document.getElementById('m-locName').value = loc.name || '';
-            document.getElementById('m-locColor').value = loc.color || DEFAULT_COLOR;
-            document.getElementById('m-locSize').value = loc.size || '';
-            document.getElementById('m-locGeo').value = loc.geo || '';
-            document.getElementById('m-locFunc').value = loc.func || '';
-            
-            document.getElementById('btnDelLoc').onclick = () => {
-                map.locations[index] = { id: loc.id, name: '', color: DEFAULT_COLOR, size: '', geo: '', func: '' };
-                closeModal('locModal'); saveProject(); renderSpatialGrid();
-            };
-            document.getElementById('locModal').style.display = 'flex';
-        }
-
-        function saveLocationModal() {
-            const mapSelect = document.getElementById('map-selector');
-            const map = activeProject.worldConfig.maps.find(m => m.id === mapSelect.value);
-            const loc = map.locations[activeLocIndex];
-            
-            loc.name = document.getElementById('m-locName').value.trim();
-            loc.color = document.getElementById('m-locColor').value;
-            loc.size = document.getElementById('m-locSize').value.trim();
-            loc.geo = document.getElementById('m-locGeo').value.trim();
-            loc.func = document.getElementById('m-locFunc').value.trim();
-            
-            closeModal('locModal'); saveProject(); renderSpatialGrid();
-        }
-
-        function openCharacterModal(id) {
-            activeCharId = id;
-            const char = activeProject.worldConfig.characters.find(c => c.id === id);
-            
-            document.getElementById('m-charName').value = char.name;
-            document.getElementById('m-charAlias').value = char.alias || '';
-            document.getElementById('m-charAge').value = char.age || '';
-            document.getElementById('m-charHeight').value = char.height || '';
-            document.getElementById('m-charZodiac').value = char.zodiac || '';
-            document.getElementById('m-charMbti').value = char.mbti || '';
-            document.getElementById('m-charClothing').value = char.clothing || '';
-            document.getElementById('m-charTraits').value = char.traits || '';
-
-            document.getElementById('btnDelChar').onclick = () => {
-                if(confirm('刪除角色？')) {
-                    activeProject.worldConfig.characters = activeProject.worldConfig.characters.filter(c => c.id !== id);
-                    activeProject.worldConfig.relationships = activeProject.worldConfig.relationships.filter(r => r.charAId !== id && r.charBId !== id);
-                    closeModal('charModal'); saveProject(); renderMindMap();
-                }
-            };
-            document.getElementById('charModal').style.display = 'flex';
-        }
-
-        function saveCharacterModal() {
-            const char = activeProject.worldConfig.characters.find(c => c.id === activeCharId);
-            const newName = document.getElementById('m-charName').value.trim();
-            if(!newName) return alert("姓名不可為空");
-            char.name = newName;
-            char.alias = document.getElementById('m-charAlias').value.trim();
-            char.age = document.getElementById('m-charAge').value.trim();
-            char.height = document.getElementById('m-charHeight').value.trim();
-            char.zodiac = document.getElementById('m-charZodiac').value.trim();
-            char.mbti = document.getElementById('m-charMbti').value.trim();
-            char.clothing = document.getElementById('m-charClothing').value.trim();
-            char.traits = document.getElementById('m-charTraits').value.trim();
-            closeModal('charModal'); saveProject(); renderMindMap();
-        }
-
-        // ==================== 5. 設定區視圖 ====================
-        function renderSetupView() {
-            // 地圖選擇器
-            const mapSelector = document.getElementById('map-selector');
-            mapSelector.innerHTML = activeProject.worldConfig.maps.map(m => `<option value="${m.id}">${m.name} (${m.size}格)</option>`).join('');
-            
-            // 時間軸
-            const tlContainer = document.getElementById('timeline-list');
-            tlContainer.innerHTML = activeProject.worldConfig.timelines.map(t => `
-                <div class="flex justify-between items-center bg-slate-800 p-2 rounded border border-slate-700">
-                    <span class="text-xs text-white">${t.name} <span class="text-cyan-500">(${t.scope})</span></span>
-                    <button onclick="deleteTimeline('${t.id}')" class="text-slate-500 hover:text-red-400 text-xs">刪除</button>
-                </div>
-            `).join('');
-
-            renderSpatialGrid();
-            renderMindMap();
-        }
-
-        // 時間軸管理
-        function addTimeline() {
-            const name = document.getElementById('newTimelineName').value.trim();
-            const scope = document.getElementById('newTimelineScope').value;
-            if(!name) return;
-            activeProject.worldConfig.timelines.push({ id: 'tl_' + Date.now(), name, scope });
-            document.getElementById('newTimelineName').value = ''; saveProject(); renderSetupView();
-        }
-        function deleteTimeline(id) {
-            if(activeProject.worldConfig.timelines.length <= 1) return alert("保留至少一條時間軸！");
-            activeProject.worldConfig.timelines = activeProject.worldConfig.timelines.filter(t => t.id !== id);
-            saveProject(); renderSetupView();
-        }
-
-        // 地圖管理
-        function addMap() {
-            const name = document.getElementById('newMapName').value.trim();
-            const size = parseInt(document.getElementById('newMapSize').value);
-            if(!name) return;
-            activeProject.worldConfig.maps.push({ id: 'map_' + Date.now(), name, size, locations: Array(size).fill({id:'', name:'', color:DEFAULT_COLOR}) });
-            document.getElementById('newMapName').value = '';
-            document.getElementById('map-selector').value = activeProject.worldConfig.maps[activeProject.worldConfig.maps.length-1].id;
-            saveProject(); renderSetupView();
-        }
-        function deleteCurrentMap() {
-            const mapId = document.getElementById('map-selector').value;
-            if(activeProject.worldConfig.maps.length <= 1) return alert("保留至少一個地圖！");
-            if(confirm('刪除這張地圖？')) {
-                activeProject.worldConfig.maps = activeProject.worldConfig.maps.filter(m => m.id !== mapId);
-                saveProject(); renderSetupView();
-            }
-        }
-
-        function renderSpatialGrid() {
-            const mapSelect = document.getElementById('map-selector');
-            if(!mapSelect || !mapSelect.value) return;
-            const map = activeProject.worldConfig.maps.find(m => m.id === mapSelect.value);
-            const container = document.getElementById('spatial-grid-container');
-            const cols = Math.sqrt(map.size);
-            container.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-            container.innerHTML = map.locations.map((loc, idx) => `
-                <div onclick="openLocationModal(${idx})" class="space-grid-cell border border-slate-700 rounded flex flex-col items-center justify-center p-1 text-center min-h-[50px]" style="background-color: ${loc.color && loc.color !== DEFAULT_COLOR ? loc.color+'33' : 'transparent'}">
-                    ${loc.color && loc.color !== DEFAULT_COLOR ? `<div class="w-3 h-3 rounded-full mb-1" style="background-color:${loc.color}"></div>` : ''}
-                    ${loc.name ? `<span class="text-[10px] font-bold text-white truncate w-full">${loc.name}</span>` : `<span class="text-slate-700 text-xs">+ 設定</span>`}
-                </div>`).join('');
-        }
-
-        // 人物心智圖
-        function addCharacter() {
-            const name = document.getElementById('newCharName').value.trim();
-            const role = document.getElementById('newCharRole').value;
-            if (!name) return;
-            if(!activeProject.worldConfig.characters) activeProject.worldConfig.characters = [];
-            if (activeProject.worldConfig.characters.some(c => c.name === name)) return alert("角色已存在！");
-            activeProject.worldConfig.characters.push({ id: 'char_' + Date.now(), name, role, alias:'', age:'', height:'', zodiac:'', mbti:'', clothing:'', traits:'' });
-            document.getElementById('newCharName').value = ''; saveProject(); renderMindMap(); 
-        }
-        function addRelationship() {
-            const charAId = document.getElementById('relCharA').value;
-            const charBId = document.getElementById('relCharB').value;
-            const label = document.getElementById('relLabel').value.trim() || '-';
-            if (!charAId || !charBId || charAId === charBId) return;
-            if(!activeProject.worldConfig.relationships) activeProject.worldConfig.relationships = [];
-            activeProject.worldConfig.relationships = activeProject.worldConfig.relationships.filter(r => !(r.charAId === charAId && r.charBId === charBId) && !(r.charAId === charBId && r.charBId === charAId));
-            activeProject.worldConfig.relationships.push({ charAId, charBId, label });
-            document.getElementById('relLabel').value = ''; saveProject(); drawMindMapLines(); 
-        }
-
-        function renderMindMap() {
+        // --- 軌道 3：人物關係網 ---
+        function renderCharacterRow() {
             const container = document.getElementById('mindmap-container');
-            const cx = container.clientWidth / 2, cy = container.clientHeight / 2;
-            const radius = Math.max(40, Math.min(cx, cy) - 50);
-            Array.from(container.children).forEach(child => { if (child.tagName !== 'svg') child.remove(); });
-            const chars = activeProject.worldConfig.characters || [];
-            const total = chars.length;
-            if (total === 0) { document.getElementById('mindmap-svg').innerHTML = ''; document.getElementById('relCharA').innerHTML = ''; document.getElementById('relCharB').innerHTML = ''; return; }
+            const svg = document.getElementById('mindmap-svg');
+            Array.from(container.children).forEach(c => { if(c.tagName !== 'svg') c.remove(); });
+            svg.innerHTML = '';
+
+            const chars = currentStory.chars || [];
+            if(chars.length === 0) { container.innerHTML += '<div class="absolute inset-0 flex items-center justify-center text-slate-600 text-xs">點擊右上角新增人物</div>'; return; }
+
+            const w = container.clientWidth || window.innerWidth, h = container.clientHeight || 200;
+            const cx = w / 2, cy = h / 2, radius = Math.max(30, Math.min(cx, cy) - 40);
 
             chars.forEach((char, i) => {
-                const bubble = document.createElement('div');
-                bubble.id = `node-${char.id}`; bubble.className = `char-bubble role-${char.role}`;
-                bubble.innerText = char.name; 
-                bubble.onclick = () => openCharacterModal(char.id); // 點擊開啟面板
+                const el = document.createElement('div');
+                let shape = char.align === 'good' ? 'align-good' : (char.align === 'evil' ? 'align-evil' : 'align-neutral');
+                el.className = `shape-char ${shape} size-${char.size}`;
+                el.innerText = char.name[0]; el.title = char.name; 
                 
+                // 單擊綁定, 雙擊編輯
+                el.onclick = (e) => { if(e.detail === 1) { setTimeout(() => { if(!el.dataset.dbl) toggleLinkChar(char.id); el.dataset.dbl=''; }, 200); } };
+                el.ondblclick = () => { el.dataset.dbl='1'; openCharProfileModal(char.id); };
+
                 let x = cx, y = cy;
-                if (total > 1) { const angle = -Math.PI / 2 + (i / total) * 2 * Math.PI; x = cx + radius * Math.cos(angle); y = cy + radius * Math.sin(angle); }
-                bubble.style.left = `${x}px`; bubble.style.top = `${y}px`;
-                container.appendChild(bubble);
+                if(chars.length > 1) { const angle = -Math.PI / 2 + (i / chars.length) * 2 * Math.PI; x = cx + radius * Math.cos(angle); y = cy + radius * Math.sin(angle); }
+                el.style.left = `${x}px`; el.style.top = `${y}px`;
+                
+                const node = currentStory.nodes.find(n => n.id === currentNodeId);
+                if(node && node.linkedChars.includes(char.id)) el.style.boxShadow = '0 0 0 3px #0ea5e9, 0 0 20px rgba(14,165,233,0.5)';
+                container.appendChild(el);
             });
-            const opts = chars.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            document.getElementById('relCharA').innerHTML = opts; document.getElementById('relCharB').innerHTML = opts;
-            if(total > 1) document.getElementById('relCharB').selectedIndex = 1;
-            setTimeout(drawMindMapLines, 50);
-        }
 
-        function drawMindMapLines() {
-            const svg = document.getElementById('mindmap-svg'); svg.innerHTML = ''; 
-            const rels = activeProject.worldConfig.relationships || [];
-            rels.forEach(rel => {
-                const nA = document.getElementById(`node-${rel.charAId}`), nB = document.getElementById(`node-${rel.charBId}`);
-                if (!nA || !nB) return;
-                const x1 = parseFloat(nA.style.left), y1 = parseFloat(nA.style.top), x2 = parseFloat(nB.style.left), y2 = parseFloat(nB.style.top);
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-                line.setAttribute('class', 'relation-line'); svg.appendChild(line);
-                const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, textLen = rel.label.length * 12 + 10; 
-                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                rect.setAttribute('x', mx - textLen / 2); rect.setAttribute('y', my - 9); rect.setAttribute('width', textLen); rect.setAttribute('height', 18);
-                rect.setAttribute('class', 'relation-text-bg'); svg.appendChild(rect);
-                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('x', mx); text.setAttribute('y', my); text.setAttribute('class', 'relation-text'); text.textContent = rel.label; svg.appendChild(text);
-            });
-        }
-
-        // ==================== 6. 寫作區與 2x2 卡片 ====================
-        function renderEditorView() {
-            if (activeProject.type === 'novel') {
-                const tlSelect = document.getElementById('card-timeline-select');
-                tlSelect.innerHTML = activeProject.worldConfig.timelines.map(t => `<option value="${t.id}">⏳ ${t.name}</option>`).join('');
-                const mapSelect = document.getElementById('card-map-select');
-                mapSelect.innerHTML = activeProject.worldConfig.maps.map(m => `<option value="${m.id}">📍 ${m.name}</option>`).join('');
-
-                const cCont = document.getElementById('card-character-checkboxes');
-                const chars = activeProject.worldConfig.characters || [];
-                if (chars.length===0) cCont.innerHTML = '<span class="text-[10px] text-slate-500">尚無角色</span>';
-                else cCont.innerHTML = chars.map(c => {
-                    let col = c.role === 'main' ? 'amber' : c.role === 'sub' ? 'blue' : 'slate';
-                    return `<label class="flex items-center gap-1 bg-slate-900 border border-${col}-900/50 px-2 py-0.5 rounded cursor-pointer hover:bg-${col}-900/30 transition"><input type="checkbox" value="${c.id}" class="chk-character accent-${col}-500"><span class="text-[10px] text-${col}-100">${c.name}</span></label>`;
-                }).join('');
-
-                renderTimeSelectors();
-                renderLocationCheckboxes();
-            } else {
-                const timeContainer = document.getElementById('dynamic-time-selectors');
-                timeContainer.innerHTML = `<input type="date" id="time-date" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-cyan-100 outline-none"><select id="time-hour" class="bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-cyan-100 outline-none"><option value="">未選</option>${Array.from({length:24}, (_,i) => `<option value="${i.toString().padStart(2,'0')}:00">${i.toString().padStart(2,'0')}:00</option>`).join('')}</select>`;
-            }
-        }
-
-        function renderTimeSelectors() {
-            if(activeProject.type === 'diary') return;
-            const timeContainer = document.getElementById('dynamic-time-selectors');
-            timeContainer.innerHTML = '';
-            let scope = 'year';
-            const tlConfig = activeProject.worldConfig.timelines.find(t => t.id === document.getElementById('card-timeline-select').value);
-            if (tlConfig) scope = tlConfig.scope;
-
-            const selectCls = "bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-cyan-100 outline-none";
-            const createSel = (id, arr) => `<select id="${id}" class="${selectCls}"><option value="">-</option>${arr.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
-            const hours = Array.from({length:24}, (_,i) => `${i.toString().padStart(2,'0')}:00`);
-            const dMonth = Array.from({length:30}, (_,i) => `第${i+1}天`);
-            const dWeek = ['週一','週二','週三','週四','週五','週六','週日'];
-            const months = Array.from({length:12}, (_,i) => `${i+1}月`);
-            const years = Array.from({length:10}, (_,i) => `第${i+1}年`);
-
-            if (scope === 'day') timeContainer.innerHTML += createSel('time-hour', hours);
-            if (scope === 'week') timeContainer.innerHTML += createSel('time-day', dWeek) + createSel('time-hour', hours);
-            if (scope === 'month') timeContainer.innerHTML += createSel('time-day', dMonth) + createSel('time-hour', hours);
-            if (scope === 'year') timeContainer.innerHTML += createSel('time-month', months) + createSel('time-day', dMonth);
-        }
-
-        function renderLocationCheckboxes() {
-            if(activeProject.type === 'diary') return;
-            const lCont = document.getElementById('card-location-checkboxes');
-            const mapConfig = activeProject.worldConfig.maps.find(m => m.id === document.getElementById('card-map-select').value);
-            if (!mapConfig) return;
-            const validLocs = mapConfig.locations.filter(l => l.name && l.name.trim() !== '');
-            if (validLocs.length===0) lCont.innerHTML = '<span class="text-[10px] text-slate-500">尚無命名網格</span>';
-            else lCont.innerHTML = validLocs.map(l => `
-                <label class="flex items-center gap-1 bg-slate-900 border px-2 py-0.5 rounded cursor-pointer hover:brightness-125 transition" style="border-color:${l.color}80; background-color:${l.color}15">
-                    <input type="checkbox" value="${l.id}" class="chk-location accent-emerald-500">
-                    <span class="text-[10px] text-white">${l.name}</span>
-                </label>`).join('');
-        }
-
-        function saveStoryCard() {
-            const hook = document.getElementById('storyHook').value.trim();
-            const develop = document.getElementById('storyDevelop').value.trim();
-            const twist = document.getElementById('storyTwist').value.trim();
-            const resolution = document.getElementById('storyResolution').value.trim();
-            
-            if (!hook && !develop && !twist && !resolution) return alert('內文不能為空！');
-            
-            let timeParts = [];
-            if (activeProject.type === 'diary') {
-                if(document.getElementById('time-date') && document.getElementById('time-date').value) timeParts.push(document.getElementById('time-date').value);
-                if(document.getElementById('time-hour') && document.getElementById('time-hour').value) timeParts.push(document.getElementById('time-hour').value);
-            } else {
-                const tlSelect = document.getElementById('card-timeline-select');
-                timeParts.push(`[${tlSelect.options[tlSelect.selectedIndex].text.replace('⏳ ','')}]`);
-                ['time-decade','time-year','time-month','time-day','time-hour'].forEach(id => {
-                    const el = document.getElementById(id); if (el && el.value) timeParts.push(el.value);
-                });
-            }
-            const timeStr = timeParts.length > 1 ? timeParts.join(' ') : timeParts[0] + ' 未定時間';
-
-            let locs = [], chars = [];
-            if (activeProject.type === 'novel') {
-                locs = Array.from(document.querySelectorAll('.chk-location:checked')).map(e => e.value); // 儲存 ID
-                chars = Array.from(document.querySelectorAll('.chk-character:checked')).map(e => e.value); // 儲存 ID
-            }
-
-            if(!activeProject.storyCards) activeProject.storyCards = [];
-            if (editingCardId) {
-                const idx = activeProject.storyCards.findIndex(c => c.id === editingCardId);
-                if (idx > -1) activeProject.storyCards[idx] = { ...activeProject.storyCards[idx], time: timeStr, locations: locs, characters: chars, hook, develop, twist, resolution };
-            } else {
-                activeProject.storyCards.push({ id: 'card_' + Date.now(), time: timeStr, locations: locs, characters: chars, hook, develop, twist, resolution });
-            }
-            saveProject(); cancelEdit(); renderCards();
-            
-            // 將軌道滾動到底部
             setTimeout(() => {
-                const track = document.getElementById('timeline-track');
-                if(track) track.parentElement.scrollTo({ left: track.parentElement.scrollWidth, behavior: 'smooth' });
-            }, 100);
+                (currentStory.rels || []).forEach(rel => {
+                    const cA = chars.find(c=>c.id === rel.a), cB = chars.find(c=>c.id === rel.b); if(!cA || !cB) return;
+                    const domA = container.children[chars.indexOf(cA) + 1], domB = container.children[chars.indexOf(cB) + 1]; if(!domA || !domB) return;
+                    const x1 = parseFloat(domA.style.left), y1 = parseFloat(domA.style.top), x2 = parseFloat(domB.style.left), y2 = parseFloat(domB.style.top);
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+                    line.setAttribute('class', 'relation-line'); svg.appendChild(line);
+                    const mx = (x1+x2)/2, my = (y1+y2)/2, len = rel.label.length * 10 + 10;
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', mx - len/2); rect.setAttribute('y', my - 8); rect.setAttribute('width', len); rect.setAttribute('height', 16);
+                    rect.setAttribute('class', 'relation-text-bg'); svg.appendChild(rect);
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', mx); text.setAttribute('y', my); text.setAttribute('class', 'relation-text'); text.textContent = rel.label; svg.appendChild(text);
+                });
+            }, 50);
         }
 
-        function editCard(id) {
-            const card = activeProject.storyCards.find(c => c.id === id);
-            if (!card) return;
-            cancelEdit(); editingCardId = id;
-            document.getElementById('editorTitle').innerText = "✏️ 編輯卡片";
-            document.getElementById('submitBtn').innerText = "💾 儲存修改";
-            document.getElementById('cancelBtn').classList.remove('hidden');
+        // 人物 Modal 控制
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        function openCharAddModal() {
+            const opts = (currentStory.chars||[]).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            document.getElementById('relCharA').innerHTML = opts; document.getElementById('relCharB').innerHTML = opts;
+            if((currentStory.chars||[]).length > 1) document.getElementById('relCharB').selectedIndex = 1;
+            document.getElementById('charAddModal').style.display = 'flex';
+        }
+        function quickAddCharacter() {
+            const name = document.getElementById('add-charName').value.trim();
+            if(!name) return;
+            if(!currentStory.chars) currentStory.chars = [];
+            currentStory.chars.push({ id: 'c_'+Date.now(), name, align: document.getElementById('add-charAlign').value, size: document.getElementById('add-charSize').value, alias:'', age:'', height:'', zodiac:'', mbti:'', clothing:'', traits:'', desc:'' });
+            document.getElementById('add-charName').value = ''; currentStory.updatedAt = Date.now(); saveGlobal(); renderCharacterRow(); openCharAddModal();
+        }
+        function quickAddRelationship() {
+            const a = document.getElementById('relCharA').value, b = document.getElementById('relCharB').value, label = document.getElementById('relLabel').value.trim() || '-';
+            if(!a || !b || a===b) return;
+            if(!currentStory.rels) currentStory.rels = [];
+            currentStory.rels.push({ a, b, label }); document.getElementById('relLabel').value = ''; currentStory.updatedAt = Date.now(); saveGlobal(); renderCharacterRow();
+        }
+        function toggleLinkChar(charId) {
+            const node = currentStory.nodes.find(n => n.id === currentNodeId);
+            if(!node.linkedChars) node.linkedChars = [];
+            const idx = node.linkedChars.indexOf(charId);
+            if(idx > -1) node.linkedChars.splice(idx, 1); else node.linkedChars.push(charId);
+            currentStory.updatedAt = Date.now(); saveGlobal(); renderCharacterRow();
+        }
+
+        // 深度人物面板
+        function openCharProfileModal(id) {
+            activeCharId = id; const char = currentStory.chars.find(c => c.id === id);
+            document.getElementById('p-charId').value = id;
+            document.getElementById('p-charName').value = char.name || '';
+            document.getElementById('p-charAlias').value = char.alias || '';
+            document.getElementById('p-charAge').value = char.age || '';
+            document.getElementById('p-charHeight').value = char.height || '';
+            document.getElementById('p-charAlign').value = char.align || 'good';
+            document.getElementById('p-charSize').value = char.size || 'main';
+            document.getElementById('p-charZodiac').value = char.zodiac || '';
+            document.getElementById('p-charMbti').value = char.mbti || '';
+            document.getElementById('p-charClothing').value = char.clothing || '';
+            document.getElementById('p-charTraits').value = char.traits || '';
+            document.getElementById('p-charDesc').value = char.desc || '';
+            document.getElementById('charProfileModal').style.display = 'flex';
+        }
+        function saveCharacterProfile() {
+            const char = currentStory.chars.find(c => c.id === activeCharId);
+            char.name = document.getElementById('p-charName').value.trim() || '未命名';
+            char.alias = document.getElementById('p-charAlias').value.trim();
+            char.age = document.getElementById('p-charAge').value.trim();
+            char.height = document.getElementById('p-charHeight').value.trim();
+            char.align = document.getElementById('p-charAlign').value;
+            char.size = document.getElementById('p-charSize').value;
+            char.zodiac = document.getElementById('p-charZodiac').value.trim();
+            char.mbti = document.getElementById('p-charMbti').value.trim();
+            char.clothing = document.getElementById('p-charClothing').value.trim();
+            char.traits = document.getElementById('p-charTraits').value.trim();
+            char.desc = document.getElementById('p-charDesc').value.trim();
+            closeModal('charProfileModal'); currentStory.updatedAt = Date.now(); saveGlobal(); renderCharacterRow();
+        }
+        function deleteCharacterProfile() {
+            if(confirm('確定刪除此角色？相關連線與綁定也會消失。')) {
+                currentStory.chars = currentStory.chars.filter(c => c.id !== activeCharId);
+                currentStory.rels = (currentStory.rels||[]).filter(r => r.a !== activeCharId && r.b !== activeCharId);
+                currentStory.nodes.forEach(n => { n.linkedChars = (n.linkedChars||[]).filter(id => id !== activeCharId); });
+                closeModal('charProfileModal'); currentStory.updatedAt = Date.now(); saveGlobal(); renderCharacterRow();
+            }
+        }
+
+        // --- 軌道 4：地點軸與群組化 ---
+        function toggleGroupMode() {
+            isGroupingMode = !isGroupingMode;
+            selectedForGroup = [];
+            const btn = document.getElementById('btnGroupLoc');
+            const confirmBtn = document.getElementById('btnConfirmGroup');
+            if (isGroupingMode) {
+                btn.classList.add('bg-cyan-600', 'text-white'); btn.classList.remove('bg-slate-800', 'text-slate-300');
+                btn.innerText = '✅ 取消群組模式';
+            } else {
+                btn.classList.add('bg-slate-800', 'text-slate-300'); btn.classList.remove('bg-cyan-600', 'text-white');
+                btn.innerText = '⊞ 群組化區域';
+                confirmBtn.classList.add('hidden');
+            }
+            renderLocationRow();
+        }
+
+        function createLocationGroup() {
+            if (selectedForGroup.length < 2) return;
+            const regionName = prompt('請輸入這幾個地點所屬的區域/群組名稱：');
+            if (!regionName) return;
+            const regionColor = prompt('請設定此區域代表色 (HEX碼，如 #0ea5e9)：', COLORS[Math.floor(Math.random()*COLORS.length)]);
             
-            document.getElementById('storyHook').value = card.hook || '';
-            document.getElementById('storyDevelop').value = card.develop || '';
-            document.getElementById('storyTwist').value = card.twist || '';
-            document.getElementById('storyResolution').value = card.resolution || '';
-
-            if(activeProject.type === 'novel') {
-                document.querySelectorAll('.chk-location').forEach(el => el.checked = (card.locations||[]).includes(el.value));
-                document.querySelectorAll('.chk-character').forEach(el => el.checked = (card.characters||[]).includes(el.value));
-                alert("多時空模式下編輯，請手動重選時間軸！");
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function cancelEdit() {
-            editingCardId = null; 
-            document.getElementById('storyHook').value = '';
-            document.getElementById('storyDevelop').value = '';
-            document.getElementById('storyTwist').value = '';
-            document.getElementById('storyResolution').value = '';
-            document.querySelectorAll('select').forEach(e => { if(e.id.startsWith('time-')) e.selectedIndex = 0; });
-            document.querySelectorAll('input[type="checkbox"]').forEach(e => e.checked = false);
-            if(document.getElementById('time-date')) document.getElementById('time-date').value = '';
-            document.getElementById('editorTitle').innerText = "📝 撰寫場景 (分鏡模式)";
-            document.getElementById('submitBtn').innerText = "📥 發布至時間軌道";
-            document.getElementById('cancelBtn').classList.add('hidden');
-        }
-
-        function deleteCard(id) {
-            if(confirm('刪除此情節？')) { activeProject.storyCards = activeProject.storyCards.filter(c => c.id !== id); saveProject(); if (editingCardId === id) cancelEdit(); renderCards(); }
-        }
-
-        // ==================== 7. 視覺化時間軸渲染 ====================
-        function renderCards() {
-            const kw = document.getElementById('searchInput').value.toLowerCase();
-            const cards = activeProject.storyCards || [];
-            document.getElementById('cardCount').innerText = cards.length;
-            const container = document.getElementById('cardsContainer');
-            container.innerHTML = `<div class="flex gap-4 md:gap-6 items-center min-w-max relative z-10 timeline-track-container" id="timeline-track"></div>`;
-            const track = document.getElementById('timeline-track');
-
-            if (cards.length === 0) {
-                track.innerHTML = '<div class="text-slate-500 text-sm ml-4">軌道上尚無劇情方塊...</div>';
-                return;
-            }
-
-            cards.forEach(card => {
-                const fullText = `${card.hook} ${card.develop} ${card.twist} ${card.resolution} ${card.time}`.toLowerCase();
-                if (kw && !fullText.includes(kw)) return;
-                
-                // 決定底色 (取第一個地點的顏色)
-                let blockColor = DEFAULT_COLOR;
-                let locNames = [];
-                if (card.locations && card.locations.length > 0) {
-                    // 尋找對應的地點物件
-                    for(let m of activeProject.worldConfig.maps) {
-                        for(let l of m.locations) {
-                            if(card.locations.includes(l.id)) {
-                                locNames.push(l.name);
-                                if(blockColor === DEFAULT_COLOR && l.color) blockColor = l.color;
-                            }
-                        }
-                    }
-                }
-                
-                // 取出人物名字縮寫
-                let charHtml = '';
-                if(card.characters && card.characters.length > 0) {
-                    let initials = [];
-                    for(let cid of card.characters) {
-                        const cObj = activeProject.worldConfig.characters.find(c => c.id === cid);
-                        if(cObj) initials.push({ name: cObj.name[0], role: cObj.role });
-                    }
-                    charHtml = `<div class="flex -space-x-2">` + initials.map(i => {
-                        let bg = i.role === 'main' ? 'bg-amber-600' : (i.role === 'sub' ? 'bg-blue-600' : 'bg-slate-600');
-                        return `<div class="w-6 h-6 rounded-full ${bg} border border-slate-900 flex items-center justify-center text-[10px] text-white font-bold">${i.name}</div>`;
-                    }).join('') + `</div>`;
-                }
-
-                // 組合內文預覽 (優先抓起或承)
-                let preview = card.hook || card.develop || card.twist || card.resolution || '';
-
-                const blockHTML = `
-                <div class="w-64 border-2 rounded-xl p-4 flex flex-col gap-2 shadow-lg backdrop-blur-md relative group transition-transform shrink-0" style="background-color: ${blockColor}33; border-color: ${blockColor}">
-                    <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                        <button onclick="editCard('${card.id}')" class="text-slate-200 hover:text-amber-400 text-[10px] px-1.5 py-0.5 bg-slate-900/80 rounded border border-slate-600">修改</button>
-                        <button onclick="deleteCard('${card.id}')" class="text-slate-200 hover:text-red-400 text-[10px] px-1.5 py-0.5 bg-slate-900/80 rounded border border-slate-600">刪除</button>
-                    </div>
-                    <div class="flex justify-between items-start">
-                        <span class="bg-slate-900/80 text-white border border-slate-700 text-[10px] px-2 py-1 rounded font-bold max-w-[120px] truncate">${card.time}</span>
-                        ${charHtml}
-                    </div>
-                    <p class="text-[10px] font-bold mt-1" style="color: ${blockColor !== DEFAULT_COLOR ? blockColor : '#94a3b8'}">📍 ${locNames.length > 0 ? locNames.join(', ') : '未定地點'}</p>
-                    <p class="text-xs text-slate-300 line-clamp-3 mt-1">${preview}</p>
-                </div>`;
-                
-                track.innerHTML += blockHTML;
+            selectedForGroup.forEach(locId => {
+                const loc = currentStory.locs.find(l => l.id === locId);
+                if(loc) { loc.region = regionName; loc.color = regionColor || loc.color; }
             });
+            
+            isGroupingMode = false; selectedForGroup = [];
+            document.getElementById('btnGroupLoc').innerText = '⊞ 群組化區域';
+            document.getElementById('btnGroupLoc').classList.add('bg-slate-800', 'text-slate-300'); document.getElementById('btnGroupLoc').classList.remove('bg-cyan-600', 'text-white');
+            document.getElementById('btnConfirmGroup').classList.add('hidden');
+            
+            currentStory.updatedAt = Date.now(); saveGlobal(); renderLocationRow();
         }
 
-        window.addEventListener('resize', () => { if (activeProject && activeProject.type === 'novel' && document.getElementById('view-setup').style.display !== 'none') renderMindMap(); });
+        function handleLocClick(id) {
+            if (isGroupingMode) {
+                const idx = selectedForGroup.indexOf(id);
+                if (idx > -1) selectedForGroup.splice(idx, 1); else selectedForGroup.push(id);
+                
+                const confirmBtn = document.getElementById('btnConfirmGroup');
+                if(selectedForGroup.length >= 2) confirmBtn.classList.remove('hidden'); else confirmBtn.classList.add('hidden');
+                renderLocationRow(); // 刷新選取外框
+            } else {
+                // 單擊綁定
+                const node = currentStory.nodes.find(n => n.id === currentNodeId);
+                if(!node.linkedLocs) node.linkedLocs = [];
+                const idx = node.linkedLocs.indexOf(id);
+                if(idx > -1) node.linkedLocs.splice(idx, 1); else node.linkedLocs.push(id);
+                currentStory.updatedAt = Date.now(); saveGlobal(); renderLocationRow();
+            }
+        }
+
+        function renderLocationRow() {
+            const track = document.getElementById('location-track');
+            track.innerHTML = '';
+            
+            const locs = currentStory.locs || [];
+            
+            // 整理分群
+            const grouped = {}; const ungrouped = [];
+            locs.forEach(l => {
+                if(l.region && l.region.trim() !== '') {
+                    if(!grouped[l.region]) grouped[l.region] = [];
+                    grouped[l.region].push(l);
+                } else { ungrouped.push(l); }
+            });
+
+            // 建立方塊 HTML 的輔助函數
+            const createBox = (loc) => {
+                const isSelectedGroup = isGroupingMode && selectedForGroup.includes(loc.id);
+                const node = currentStory.nodes.find(n => n.id === currentNodeId);
+                const isLinked = !isGroupingMode && node && node.linkedLocs && node.linkedLocs.includes(loc.id);
+                
+                let borderStyle = `border-color: ${loc.color};`;
+                let classNames = `loc-box border flex items-center justify-center p-2 text-center relative bg-slate-900`;
+                
+                if(isSelectedGroup) classNames += ' selected-for-group';
+                if(isLinked) borderStyle = `border-color: ${loc.color}; border-width: 2px; box-shadow: 0 0 0 3px #0ea5e9, 0 0 15px ${loc.color}80;`;
+
+                return `<div class="${classNames}" style="${borderStyle}" onclick="handleLocClick('${loc.id}')" ondblclick="openLocProfileModal('${loc.id}')">
+                    <span class="text-[10px] font-bold text-white z-10 break-words w-full" style="text-shadow: 0 1px 3px rgba(0,0,0,0.8)">${loc.name}</span>
+                </div>`;
+            };
+
+            // 渲染群組
+            for(const [region, items] of Object.entries(grouped)) {
+                let html = `<div class="flex flex-col gap-1.5 bg-slate-900 border border-slate-700 p-2 rounded-xl shrink-0 h-full">
+                    <span class="text-[10px] font-bold text-slate-400 px-1 truncate max-w-[120px]">📂 ${region}</span>
+                    <div class="flex flex-1 gap-2 items-center">`;
+                items.forEach(l => html += createBox(l));
+                html += `</div></div>`;
+                track.innerHTML += html;
+            }
+
+            // 渲染未分群
+            ungrouped.forEach(l => { track.innerHTML += createBox(l); });
+
+            // + 按鈕
+            track.innerHTML += `<div onclick="addLocation()" class="loc-box border-2 dashed border-slate-700 flex items-center justify-center text-slate-500 hover:border-emerald-500 hover:text-emerald-400 bg-slate-900 shrink-0"><span class="text-2xl font-bold">+</span></div>`;
+        }
+
+        function addLocation() {
+            const name = prompt('輸入新地點名稱：'); if(!name) return;
+            if(!currentStory.locs) currentStory.locs = [];
+            const color = COLORS[currentStory.locs.length % COLORS.length];
+            currentStory.locs.push({ id: 'l_'+Date.now(), name, color, region:'', geo:'', func:'', desc:'' });
+            currentStory.updatedAt = Date.now(); saveGlobal(); renderLocationRow();
+        }
+
+        // 深度地點面板
+        function openLocProfileModal(id) {
+            const loc = currentStory.locs.find(l => l.id === id);
+            document.getElementById('p-locId').value = id;
+            document.getElementById('p-locName').value = loc.name;
+            document.getElementById('p-locRegion').value = loc.region || '';
+            document.getElementById('p-locColor').value = loc.color || DEFAULT_COLOR;
+            document.getElementById('p-locGeo').value = loc.geo || '';
+            document.getElementById('p-locFunc').value = loc.func || '';
+            document.getElementById('locProfileModal').style.display = 'flex';
+        }
+        function saveLocationProfile() {
+            const id = document.getElementById('p-locId').value;
+            const loc = currentStory.locs.find(l => l.id === id);
+            loc.name = document.getElementById('p-locName').value.trim() || '未命名地點';
+            loc.region = document.getElementById('p-locRegion').value.trim();
+            loc.color = document.getElementById('p-locColor').value;
+            loc.geo = document.getElementById('p-locGeo').value.trim();
+            loc.func = document.getElementById('p-locFunc').value.trim();
+            closeModal('locProfileModal');
+            currentStory.updatedAt = Date.now(); saveGlobal(); renderLocationRow();
+        }
+        function deleteLocationProfile() {
+            const id = document.getElementById('p-locId').value;
+            if(confirm('刪除此地點？')) {
+                currentStory.locs = currentStory.locs.filter(l => l.id !== id);
+                currentStory.nodes.forEach(n => { n.linkedLocs = (n.linkedLocs||[]).filter(lid => lid !== id); });
+                closeModal('locProfileModal');
+                currentStory.updatedAt = Date.now(); saveGlobal(); renderLocationRow();
+            }
+        }
+
+        window.addEventListener('resize', () => { if(currentStory && document.getElementById('screen-workspace').style.display !== 'none') renderCharacterRow(); });
+        
         initApp();
     </script>
 </body>
